@@ -8,13 +8,14 @@
 #                       uwsgi with pip3 (apt package refuses to coperate).
 #   0.2.1   2019-01-20  Added simple "step X" console prints to help identify
 #                       where the script failes.
+#   0.2.2   2019-01-21  Bug fixes.
 #
 import os
 import sys
 import platform
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -163,8 +164,7 @@ def print_step_label(msg: str):
     else:
         print_step_label.count += 1
     log.info(
-        "{} STEP {} : {}".format(
-            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "STEP {} : {}".format(
             print_step_label.count,
             msg
         )
@@ -588,8 +588,8 @@ if __name__ == '__main__':
         #     os._exit(-1)
 
         # Run post-clone script, if any
-        if repo[3]:
-            do_or_die("python3 " + repo[3])
+        if repo[2]:
+            do_or_die("python3 " + repo[2])
             # proc_script = subprocess.run(
             #     ["python3", repo[3]]
             # )
