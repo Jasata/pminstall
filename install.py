@@ -79,17 +79,17 @@ packages = [
 #
 repositories = [
     (
-        "755 root.root /srv/pmdatabase",
+        ("755", "root.root", "/srv/pmdatabase"),
         "https://github.com/jasata/pmdatabase",
         "setup.py"
     ),
     (
-        "775 www-data.www-data /srv/nginx-root",
+        ("775", "www-data.www-data", "/srv/nginx-root"),
         "https://github.com/jasata/pmapi",
         "setup.py"
     ),
     (
-        "775 patemon.patemon /srv/backend",
+        ("775", "patemon.patemon" "/srv/backend"),
         "https://github.com/jasata/psud",
         "setup.py"
     )
@@ -571,34 +571,35 @@ if __name__ == '__main__':
     #
     print_step_label("Clone GitHub repositories...")
     for repo in repositories:
+        # Values
+        repo_dir = repo[0][2]
+        repo_usr = repo[0][1]
+        repo_prm = repo[0][0]
+        repo_url = repo[1]
+        repo_run = repo[2]
+
         # Create and change to target directory
-        if not os.path.exists(repo[0]):
-            os.makedirs(repo[0])
-        elif not os.path.isdir(repo[0]):
-            print("ERROR! '{}' exists and is not a directory!".format(repo[0]))
+        if not os.path.exists(repo_dir):
+            os.makedirs(repo_dir)
+        elif not os.path.isdir(repo_dir):
+            print(
+                "ERROR! '{}' exists and is not a directory!".format(
+                    repo_dir
+                )
+            )
             os._exit(-1)
-        os.chdir(repo[0])
+        do_or_die("chown {} {}".format(repo_usr, repo_dir))
+        do_or_die("chmod {} {}".format(repo_prm, repo_dir))
+        os.chdir(repo_dir)
+
         # Run git clone
-        do_or_die("git clone --recurse-submodules " + repo[1] + " .")
-        # proc_git = subprocess.run(
-        #     ["git", "clone", "--recurse-submodules", repo[1], "."]
-        # )
-        # if proc_git.returncode:
-        #     print("git clone returned with error code! Exiting...")
-        #     os._exit(-1)
+        do_or_die("git clone --recurse-submodules " + repo_url + " .")
 
         # Run post-clone script, if any
-        if repo[2]:
-            do_or_die("python3 " + repo[2])
-            # proc_script = subprocess.run(
-            #     ["python3", repo[3]]
-            # )
-            # if proc_script.returncode:
-            #     print("Post clone installation script returned with error!")
-            #     os._exit(-1)
-        # Change permissions
-        # subprocess.run() "setup_ownership_and_permission.py" if exists
-        # No... let "setup.py" in each repo do that...
+        if repo_run:
+            print("Executing repository specific setup script")
+            do_or_die("python3 " + repo_run)
+
     print("All repositories cloned!\n")
 
 
