@@ -6,13 +6,15 @@
 #   0.1.0   2018-11-24  Initial version.
 #   0.2.0   2018-11-27  Modified to set local timezone and to install
 #                       uwsgi with pip3 (apt package refuses to coperate).
+#   0.2.1   2019-01-20  Added simple "step X" console prints to help identify
+#                       where the script failes.
 #
 import os
 import sys
 import platform
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -153,6 +155,30 @@ __moduleName = os.path.basename(os.path.splitext(__file__)[0])
 __fileName   = os.path.basename(__file__)
 
 
+def print_step_label(msg: str):
+    try:
+        (print_step_label.count)
+    except:
+        print_step_label.count = 1
+    else:
+        print_step_label.count += 1
+    log.info(
+        "{} STEP {} : {}".format(
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            print_step_label.count,
+            msg
+        )
+    )
+    print("\n" + "#" * 79)
+    print(
+        "## STEP {} : {}".format(
+            print_step_label.count,
+            msg
+        )
+    )
+    print("#" * 79)
+
+
 def do_or_die(cmd: list):
     prc = subprocess.run(cmd.split(" "))
     if prc.returncode:
@@ -177,6 +203,7 @@ def get_group(group) -> grp.struct_group:
         return None
     return group
 
+
 def get_user(user) -> pwd.struct_passwd:
     """Returns the user ID or None if it does not exist."""
     try:
@@ -193,6 +220,7 @@ def get_user(user) -> pwd.struct_passwd:
     except KeyError:
         return None
     return user
+
 
 def create_group(name, gid=None) -> grp.struct_group:
     """Creates a group and returns grp.struct_group for it."""
@@ -213,6 +241,7 @@ def create_group(name, gid=None) -> grp.struct_group:
     if process.returncode:
         raise ValueError("Subprocess groupadd returned with nonzero code!")
     return get_group(name)
+
 
 def create_user(name, pwd, primarygrp, uid=None) -> pwd.struct_passwd:
     """Creates a user and returns pwd.struct_passwd for it. If primarygrp is None, user shall be created into its own group (like pi.pi, for example). NOTE: Debian Stretch 'useradd' has bug(s). For one, the default shell no longer gets set. We need to do this explictly after creation with 'usermod' command."""
@@ -260,6 +289,7 @@ def create_user(name, pwd, primarygrp, uid=None) -> pwd.struct_passwd:
         )
     return get_user(name)
 
+
 def add2group(user, group):
     """Adds specified user to specified secondary group."""
     # usermod -a G 
@@ -268,6 +298,7 @@ def add2group(user, group):
     )
     if proc_usermod.returncode:
         raise ValueError("usermod returned non-zero!")
+
 
 def display_all():
     """Print all configuration data."""
@@ -294,6 +325,7 @@ def display_all():
             print("Incorrect group!")
             continue
         print("OK")
+
 
 class User:
     uid         = None
@@ -394,10 +426,11 @@ if __name__ == '__main__':
     # ELSE, we install...
     #
     log.info(
-        "{} version {}, {}".format(
+        "PATE Monitor Installer / {} version {}, {}".format(
             __fileName,
             __version__,
-            datetime.datetime.now().isoformat())
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        )
     )
 
 
@@ -406,13 +439,13 @@ if __name__ == '__main__':
     # 1. Force-relink '/etc/localtime -> /usr/share/zoneinfo/Europe/Helsinki'
     # 2. Issue 'dpkg-reconfigure -f noninteractive tzdata'
 
-    print("Setting Finnish localtime")
+    print_step_label("Setting Finnish localtime")
     do_or_die("ln -fs /usr/share/zoneinfo/Europe/Helsinki /etc/localtime")
     do_or_die("dpkg-reconfigure -f noninteractive tzdata")
     print("Done!")
 
 
-    print("Updating system....")
+    print_step_label("Updating system packages....")
     do_or_die("apt update")
     do_or_die("apt -y upgrade")
     print("System update done!\n")
@@ -424,7 +457,7 @@ if __name__ == '__main__':
     # Generate list of "future groups" based on 'users'.
     # These are usernames that have primary group defined as None.
     # They will be created a new user group with identical name (pi.pi).
-    print("Checking for needed groups...", end="", flush=True)
+    print_step_label("Checking for needed groups...", end="", flush=True)
     future_groups = []
     for user in users:
         if user[3] is None:
@@ -450,7 +483,7 @@ if __name__ == '__main__':
     #
     # Create solution specific user accounts
     #
-    print("Creating PATE Monitor specific user accounts...")
+    print_step_label("Creating PATE Monitor specific user accounts...")
     try:
         for usertuple in users:
             user = User(*usertuple)
@@ -478,7 +511,7 @@ if __name__ == '__main__':
     #
     # Assign group memberships
     #
-    print("Assigning group memberships...")
+    print_step_label("Assigning group memberships...")
     for user, groups in memberships.items():
         for group in groups:
             print(
@@ -496,7 +529,7 @@ if __name__ == '__main__':
     #
     # Filesystem setup
     #
-    print(
+    print_step_label(
         "Setting up initial filesystem ownerships and permissions...",
         end="", flush=True
     )
@@ -515,7 +548,7 @@ if __name__ == '__main__':
     #
     # Install packages
     #
-    print("Begin APT package installations...")
+    print_step_label("Begin APT package installations...")
     do_or_die("apt -y install " + " ".join(packages))
     # proc_apt = subprocess.run(
     #     ["apt", "-y", "install", *packages]
@@ -529,14 +562,14 @@ if __name__ == '__main__':
     #
     # Pip install(s)
     #
-    print("pip3 install uwsgi...")
+    print_step_label("pip3 install uwsgi...")
     do_or_die("pip3 install uwsgi")
 
 
     #
     # Clone repositories
     #
-    print("Using git to clone repositories...")
+    print_step_label("Using git to clone repositories...")
     for repo in repositories:
         # Create and change to target directory
         if not os.path.exists(repo[0]):
