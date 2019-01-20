@@ -457,7 +457,7 @@ if __name__ == '__main__':
     # Generate list of "future groups" based on 'users'.
     # These are usernames that have primary group defined as None.
     # They will be created a new user group with identical name (pi.pi).
-    print_step_label("Checking for needed groups...", end="", flush=True)
+    print_step_label("Checking for needed groups...")
     future_groups = []
     for user in users:
         if user[3] is None:
@@ -477,7 +477,7 @@ if __name__ == '__main__':
         log.error("Missing necessary group(s): {}".format(",".join(missing)))
         print("Missing necessary group(s): {}".format(",".join(missing)))
         os._exit(-1)
-    print("OK!\n")
+    print("Groups OK!\n")
 
 
     #
@@ -530,8 +530,7 @@ if __name__ == '__main__':
     # Filesystem setup
     #
     print_step_label(
-        "Setting up initial filesystem ownerships and permissions...",
-        end="", flush=True
+        "Setting up initial filesystem ownerships and permissions..."
     )
     for path, values in initialfilesys.items():
         if not os.path.exists(path):
@@ -541,7 +540,7 @@ if __name__ == '__main__':
             os._exit(-1)
         shutil.chown(path, values[1], values[2])
         os.chmod(path, values[0])
-    print("OK!")
+    print("Ownerships and permissions OK!\n")
 
 
 
@@ -564,12 +563,13 @@ if __name__ == '__main__':
     #
     print_step_label("pip3 install uwsgi...")
     do_or_die("pip3 install uwsgi")
+    print("uwsgi OK!\n")
 
 
     #
     # Clone repositories
     #
-    print_step_label("Using git to clone repositories...")
+    print_step_label("Clone GitHub repositories...")
     for repo in repositories:
         # Create and change to target directory
         if not os.path.exists(repo[0]):
@@ -599,7 +599,7 @@ if __name__ == '__main__':
         # Change permissions
         # subprocess.run() "setup_ownership_and_permission.py" if exists
         # No... let "setup.py" in each repo do that...
-    print("All repositories cloned!")
+    print("All repositories cloned!\n")
 
 
 # EOF
