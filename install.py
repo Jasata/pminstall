@@ -9,13 +9,14 @@
 #   0.2.1   2019-01-20  Added simple "step X" console prints to help identify
 #                       where the script failes.
 #   0.2.2   2019-01-21  Bug fixes.
+#   0.2.3   2019-01-21  pmapi setup.py now with --force option.
 #
 import os
 import sys
 import platform
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -86,7 +87,7 @@ repositories = [
     (
         ("775", "www-data.www-data", "/srv/nginx-root"),
         "https://github.com/jasata/pmapi",
-        "setup.py"
+        "setup.py --force"
     ),
     (
         ("775", "patemon.patemon" "/srv/backend"),
