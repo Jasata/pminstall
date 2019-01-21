@@ -90,7 +90,7 @@ repositories = [
         "setup.py --force"
     ),
     (
-        ("775", "patemon.patemon" "/srv/backend"),
+        ("775", "patemon.patemon", "/srv/backend"),
         "https://github.com/jasata/psud",
         "setup.py"
     )
