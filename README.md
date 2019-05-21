@@ -28,4 +28,4 @@ For development purposes, SMB share should be set up.
   1. Install Samba: `# apt -y install samba`.
   2. Copy the provided `smb.conf` into `/etc/samba/`.
   3. Add Samba password for user `pi`: `# smbpasswd -a pi`.
-  4. Restard Samba: `# servicectl restart smbd`.
+  4. Restard Samba: `# systemctl restart smbd`.
