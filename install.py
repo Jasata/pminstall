@@ -10,20 +10,21 @@
 #                       where the script failes.
 #   0.2.2   2019-01-21  Bug fixes.
 #   0.2.3   2019-01-21  pmapi setup.py now with --force option.
+#   0.3.0   2019-06-10	Keyboard configuration function added.
 #
 import os
 import sys
 import platform
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.2.3"
+__version__ = "0.3.0"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
 =============================================================================
 University of Turku, Department of Future Technologies
 ForeSail-1 / PATE Monitor installation script
-Version {}, 2018 {}
+Version {}, 2019 {}
 """.format(__version__, __author__)
 
 
@@ -299,6 +300,17 @@ def add2group(user, group):
     )
     if proc_usermod.returncode:
         raise ValueError("usermod returned non-zero!")
+
+
+def set_keymap():
+    """Hardcoded for "fi", for now..."""
+    layout = "fi"
+    do_or_die('sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"$KEYMAP\"/"')
+    do_or_die('dpkg-reconfigure -f noninteractive keyboard-configuration')
+    # Apply changes
+    do_or_die('invoke-rc.d keyboard-setup start')
+    do_or_die("setsid sh -c 'exec setupcon -k --force <> /dev/tty1 >&0 2>&1'")
+    do_or_die("udevadm trigger --subsystem-match=input --action=change")
 
 
 def display_all():
