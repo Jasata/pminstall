@@ -635,7 +635,7 @@ if __name__ == '__main__':
             print("Executing repository specific setup script")
             do_or_die("python3 " + repo_run)
 
-        print("-- Repository successfully setup " + "-" * 46)
+        print("-- Repository successfully setup " + "-" * 46 + "\n\n")
 
 
     print("All repositories cloned!\n")
