@@ -302,15 +302,25 @@ def add2group(user, group):
         raise ValueError("usermod returned non-zero!")
 
 
-def set_keymap():
-    """Hardcoded for "fi", for now..."""
-    layout = "fi"
-    do_or_die('sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"$KEYMAP\"/"')
-    do_or_die('dpkg-reconfigure -f noninteractive keyboard-configuration')
+def localize_keymap(model = "pc105", layout = "fi", variant = "", options = ""):
+    """This routine is 'borrowed' from raspi-config."""
+    keyboard_config_file = "# KEYBOARD CONFIGURATION FILE\n\n" + \
+        "# Consult the keyboard(5) manual page.\n\n" + \
+        "XKBMODEL=\"{}\"\nXKBLAYOUT=\"{}\"\n".format(model, layout) + \
+        "XKBVARIANT=\"{}\"\nXKBOPTIONS=\"{}\"\n\n".format(variant, options) + \
+        "BACKSPACE=\"guess\""
+    with open("/etc/default/keyboard", 'w') as kfile:
+        kfile.write(keyboard_config_file)
     # Apply changes
+    do_or_die('dpkg-reconfigure -f noninteractive keyboard-configuration')
     do_or_die('invoke-rc.d keyboard-setup start')
-    do_or_die("setsid sh -c 'exec setupcon -k --force <> /dev/tty1 >&0 2>&1'")
+    do_or_die("setupcon -k --force")
     do_or_die("udevadm trigger --subsystem-match=input --action=change")
+
+
+def localize_timezone():
+    do_or_die("ln -fs /usr/share/zoneinfo/Europe/Helsinki /etc/localtime")
+    do_or_die("dpkg-reconfigure -f noninteractive tzdata")
 
 
 def display_all():
@@ -453,8 +463,12 @@ if __name__ == '__main__':
     # 2. Issue 'dpkg-reconfigure -f noninteractive tzdata'
 
     print_step_label("Setting Finnish localtime")
-    do_or_die("ln -fs /usr/share/zoneinfo/Europe/Helsinki /etc/localtime")
-    do_or_die("dpkg-reconfigure -f noninteractive tzdata")
+    localize_timezone()
+    print("Done!")
+
+
+    print_step_label("Setting Finnish keymap")
+    localize_keymap()
     print("Done!")
 
 

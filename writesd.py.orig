@@ -4,11 +4,9 @@
 #
 import os
 import sys
-import time            # sleep()
 import subprocess
 
-# img = "/root/2018-11-13-raspbian-stretch-lite.img"
-img = "2019-04-08-raspbian-stretch-lite.img"
+img = "/root/2018-11-13-raspbian-stretch-lite.img"
 pmidir = "/srv/pminstall"
 
 def do_or_die(cmd: list):
@@ -17,7 +15,7 @@ def do_or_die(cmd: list):
         print("Command '{}' failed!".format(cmd))
         os._exit(-1)
 
-def get_mmcblkdev_orig():
+def get_mmcblkdev():
     """Return one (connected) or die."""
     accepted = ("mmcblk0", "mmcblk1")
     connected = os.listdir("/sys/block")
@@ -29,9 +27,6 @@ def get_mmcblkdev_orig():
         sys.exit('More than one MMC block devices connected!')
     return mmcblkdevs[0]
 
-def get_mmcblkdev():
-    """Dummy function for DELL TY1811020 use!"""
-    return "sdb"
 
 if __name__ == '__main__':
 
@@ -41,11 +36,8 @@ if __name__ == '__main__':
     # Write image
     do_or_die("dd if={} of=/dev/{} bs=4M conv=fsync".format(img, blkdev))
 
-    # For unknown reason, immediate mount after dd fails. Sleep some...
-    time.sleep(3)
-
     # Mount /boot partition to /mnt
-    do_or_die("mount /dev/{}1 /mnt".format(blkdev))
+    do_or_die("mount /dev/{}p1 /mnt".format(blkdev))
 
     # Create 'ssh'
     do_or_die("touch /mnt/ssh")
