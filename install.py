@@ -63,6 +63,7 @@ packages = [
     "python3-dev",
     "python3-pip",
     "python3-flask",
+    "python3-serial",
     "git-all",
     "sqlite3"
 ]
@@ -75,9 +76,10 @@ packages = [
 #
 # Repositories
 #
-#   Target directory is created (repo[0]), after which
-#   'git' clones the online repository (repo[1]) into it.
-#   Finally (if not None), a setup script is run (repo[2]).
+#   repo[0] is just a display name for the repository...
+#   Target directory is created (repo[1]), after which
+#   'git' clones the online repository (repo[2]) into it.
+#   Finally (if not None), a setup script is run (repo[3]).
 #
 repositories = [
     (
