@@ -45,7 +45,7 @@ if __name__ == '__main__':
     # Write image
     print(
         "Writing Rasbian image to block device '{}'... ".format(blkdev),
-        end = ''
+        end = '', flush=True
         )
     do_or_die("dd if={} of=/dev/{} bs=4M conv=fsync".format(img, blkdev))
     # For unknown reason, immediate mount after dd fails. Sleep some...
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     # Mount /boot partition to /mnt
     print(
         "Mounting SD:/boot into /mnt... ",
-        end = ''
+        end = '', flush=True
         )
     do_or_die("mount /dev/{}1 /mnt".format(blkdev))
     print("Done!")
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     # Create 'ssh'
     print(
         "Enabling SSH server... ",
-        end = ''
+        end = '', flush=True
         )
     do_or_die("touch /mnt/ssh")
     print("Done!")
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     # Copy ´smb.conf´ to /boot (/mnt)
     print(
         "Copying PATEMON samba config file... ",
-        end = ''
+        end = '', flush=True
         )
     do_or_die("cp {}/smb.conf /mnt/".format(pmidir))
     print("Done!")
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     # Copy 'install.py' to /boot (/mnt)
     print(
         "Copying PATEMON install script... ",
-        end = ''
+        end = '', flush=True
         )
     do_or_die("cp {}/install.py /mnt/".format(pmidir))
     print("Done!")
