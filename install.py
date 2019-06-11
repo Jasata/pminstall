@@ -81,16 +81,19 @@ packages = [
 #
 repositories = [
     (
+        "PM Database",
         ("755", "root.root", "/srv/pmdatabase"),
         "https://github.com/jasata/pmdatabase",
         "setup.py"
     ),
     (
+        "PM API",
         ("775", "www-data.www-data", "/srv/nginx-root"),
         "https://github.com/jasata/pmapi",
         "setup.py --force"
     ),
     (
+        "PSU Daemon", 
         ("775", "patemon.patemon", "/srv/backend"),
         "https://github.com/jasata/psud",
         "setup.py"
@@ -599,11 +602,12 @@ if __name__ == '__main__':
     print_step_label("Clone GitHub repositories...")
     for repo in repositories:
         # Values
-        repo_dir = repo[0][2]
-        repo_usr = repo[0][1]
-        repo_prm = repo[0][0]
-        repo_url = repo[1]
-        repo_run = repo[2]
+        reponame = repo[0]
+        repo_dir = repo[1][2]
+        repo_usr = repo[1][1]
+        repo_prm = repo[1][0]
+        repo_url = repo[2]
+        repo_run = repo[3]
 
         # Create and change to target directory
         if not os.path.exists(repo_dir):
@@ -619,6 +623,10 @@ if __name__ == '__main__':
         do_or_die("chmod {} {}".format(repo_prm, repo_dir))
         os.chdir(repo_dir)
 
+        print("-" * 79)
+        print("Retrieving and setting up " + reponame)
+        print("-" * 79)
+
         # Run git clone
         do_or_die("git clone --recurse-submodules " + repo_url + " .")
 
@@ -626,6 +634,9 @@ if __name__ == '__main__':
         if repo_run:
             print("Executing repository specific setup script")
             do_or_die("python3 " + repo_run)
+
+        print("-- Repository successfully setup " + "-" * 46)
+
 
     print("All repositories cloned!\n")
 
