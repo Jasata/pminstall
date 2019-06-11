@@ -24,7 +24,9 @@
 
 # Additional Steps (DevMode)
 
-For development purposes, SMB share should be set up.
+**NOTE:** Samba shares are less than ideal for UTU network. One stress reducing approach would be to use Visual Studio Code Inisders edition and Remote-SSH module. _As of June 2019, the Remote-SSH has not yet been released for mainstream VSC._
+
+Basic Samba installation steps (using provided `smb.conf` file):
 
   1. Install Samba: `# apt -y install samba`.
   2. Copy the provided `smb.conf` into `/etc/samba/`.
