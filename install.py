@@ -64,7 +64,7 @@ packages = [
     "python3-pip",
     "python3-flask",
     "python3-serial",
-    "git-all",
+    "git",
     "sqlite3"
 ]
 # Persistently want the config files to be under /etc/uwsgi..
