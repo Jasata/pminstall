@@ -18,9 +18,9 @@
 # Installation Procedure
 
  1. Write Rasbian image into an SD.
- 2. Create file `/boot/ssd`.
- 3. Copy this `install.py` to `/boot/`.
- 4. Boot, ssh into the box, assume `root` identity, run `/boot/install.py`.
+ 2. Create file `/boot/ssh` (to enable remote SSH connections).
+ 3. Copy the `install.py` to `/boot/`.
+ 4. Boot, ssh into the box, assume `root` identity (`sudo su -`), run `/boot/install.py`.
 
 # Additional Steps (DevMode)
 
