@@ -17,10 +17,11 @@
 
 # Installation Procedure
 
- 1. Write Rasbian image into an SD.
- 2. Create file `/boot/ssh` (to enable remote SSH connections).
- 3. Copy the `install.py` to `/boot/`.
- 4. Boot, ssh into the box, assume `root` identity (`sudo su -`), run `/boot/install.py`.
+ 1. Write Rasbian image into an SD. (`dd if=${rasbian_image} of=/dev/mmcblk0 bs=4M conv=fsync`)
+ 2. Mount `/dev/mmcblk0p1` (aka. "boot") to `/mnt` and create file `/mnt/ssh` (to enable remote SSH connections).
+ 3. Copy the `install.py` to `/mnt/`.
+ 4. Unmount `/mnt/` and remove uSD.
+ 5. Insert uSD to Raspberry Pi, boot, ssh into the box, assume `root` identity (`sudo su -`), run `/boot/install.py`.
 
 # Additional Steps (DevMode)
 
