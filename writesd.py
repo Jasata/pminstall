@@ -4,6 +4,7 @@
 #
 import os
 import sys
+import time             # for time.sleep()
 import subprocess
 
 img = "/root/2018-11-13-raspbian-stretch-lite.img"
