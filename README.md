@@ -36,4 +36,4 @@ Basic Samba installation steps (using provided `smb.conf` file):
 
 # Change Log
 
-2019.11.04 Updated to Debian 10 based [Raspbian Buster Lite 2019-09-26](https://www.raspberrypi.org/downloads/raspbian/), Python X.X and ...
+2019.11.04 Updated to Debian 10 based [Raspbian Buster Lite 2019-09-26](https://www.raspberrypi.org/downloads/raspbian/), Python 3.7.3 and PySerial 3.4.
