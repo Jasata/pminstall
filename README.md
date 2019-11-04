@@ -2,7 +2,7 @@
 
 **Target platform:** Raspberry Pi 3 B+<br>
 **Target OS:** Rasbian 2018-11-13 or newer<br>
-**Dependencies:** Python 3.5.3 or newer, PySerial ver X.X ...<br>
+**Dependencies:** Python 3.5.3 or newer, PySerial ver 3.2.1 ...<br>
 
 ### Installation Activities
 
@@ -32,3 +32,7 @@ Basic Samba installation steps (using provided `smb.conf` file):
   2. Copy the provided `smb.conf` into `/etc/samba/`.
   3. Add Samba password for user `pi`: `# smbpasswd -a pi`.
   4. Restard Samba: `# systemctl restart smbd`.
+
+# Change Log
+
+2019.11.04 Updated to Debian 10 based [Raspbian Buster Lite 2019-09-26](https://www.raspberrypi.org/downloads/raspbian/), Python X.X and ...
