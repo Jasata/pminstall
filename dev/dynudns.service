@@ -1,0 +1,11 @@
+[Unit]
+Description=DynuDNS, free dynamic IP service.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/local/bin/dynudns.sh
+
+[Install]
+WantedBy=multi-user.target

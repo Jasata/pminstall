@@ -17,6 +17,10 @@
 
 # Installation Procedure
 
+**NOTE:** If you use `writesd.py`, you can use `-d` (or `--dev`) options to create development unit specific image. (Currently limited to enabling free Dynu DNS service to solve the issue of dynamic IP in UTU network).
+
+Either use `writesd.py` or perform manually:
+
  1. Write Rasbian image into an SD. (`dd if=${rasbian_image} of=/dev/mmcblk0 bs=4M conv=fsync`)
  2. Mount `/dev/mmcblk0p1` (aka. "boot") to `/mnt` and create file `/mnt/ssh` (to enable remote SSH connections).
  3. Copy the `install.py` to `/mnt/`.
