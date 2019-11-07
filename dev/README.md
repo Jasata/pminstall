@@ -22,3 +22,16 @@ TODO:
   - Make sure that `install.py` has some way to NOT execute with dev options, if user so chooses.
  
  
+## Secret file format
+
+This is just a basic Python file. Create `dynudns.secret` -file into `dev/` directory (this one). Copy the content below and replace with appropriate username and password values:
+
+    #! /usr/bin/env python3
+    #
+    #   Import to the script:
+    #   from dynudns.secret import *
+    #
+    username="<username>"
+    password="<password>"
+    
+    # EOF
