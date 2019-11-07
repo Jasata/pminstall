@@ -33,11 +33,19 @@ ForeSail-1 / PATE Monitor uSD writer
 Version {}, 2019 {}
 """.format(__version__, __author__)
 
+from dev.secrets import *
 
 def setup_ddns():
     # assume that the system partion has been mounted to /mnt
-    # Step 1 - create the client script
-    do_or_die("cp {}/dev/dynudns.sh /mnt/usr/local/bin".format(pmidir))
+    # Step 1 - create the client script with correct user/pass from secret file
+    with open("/mnt/usr/local/bin/dynudns.sh") as file:
+        filecontent = file.read()
+    filecontent.replace("{{user}}", ddnsuser)
+    filecontent.replace("{{pass}}", ddnspass)
+    with open("/mnt/usr/local/bin/dynudns.sh") as file:
+        file.write(filecontent)
+    #do_or_die("cp {}/dev/dynudns.sh /mnt/usr/local/bin".format(pmidir))
+
     # Step 2 - set permissions
     do_or_die("chmod 750 /mnt/usr/local/bin/dynudns.sh")
     # Step 3 - create unit file for systemd service
@@ -50,6 +58,8 @@ def setup_ddns():
     do_or_die("cp {}/dev/dynudns.cronjob /mnt/etc/cron.hourly/dynudns".format(pmidir))
     # Step 7 - set cron job permissions
     do_or_die("chmod 755 /mnt/etc/cron.hourly/dynudns")
+    # Step 8 - set correct username and password from secret file
+
 
 def do_or_die(cmd: list):
     prc = subprocess.run(cmd.split(" "))

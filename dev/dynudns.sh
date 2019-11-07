@@ -16,8 +16,8 @@
 #      good {ip}       String "good" followed by the IP that was sent
 #      (?)             Some response for authentication / other errors
 #
-username="jasata"
-password="qwerty"
+username="{{user}}"
+password="{{pass}}"
 passmd5="$(echo -n ${password} | md5sum - | awk '{print $1;}')"
 logfile="/var/log/dynudns.org"
 datetime="$(date +"%Y-%m-%d %T")"

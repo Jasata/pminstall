@@ -9,6 +9,9 @@ __pycache__/
 # Rasbian image files
 *.img
 
+# Secret files
+*.secret
+
 # Distribution / packaging
 .Python
 build/
