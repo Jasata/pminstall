@@ -11,3 +11,14 @@ Because in the UTU network devices that have not been purchased through the appr
 Adopted approach is to create an account into a free DDNS service and update the IP of the development device.
 
 Selected service is [Dynu DNS](https://www.dynu.com/en-US/) and the hostname chosen for development machine is `pate.freeddns.org`. Account details are stored into a separate file that is excluded via `.gitignore`.
+
+TODO:
+
+  - Create secret.py and import that `from myconfig import *` -style into the `writesd.py`.
+  - Use these values to search and replace tokens in the appropriate files after they have been written/copied to the target.
+ 
+  - Additional todo; enable dev options automatically for the `install.py`
+  - Create option `--noddns` for my personal dev use (unnecessary in my own network)
+  - Make sure that `install.py` has some way to NOT execute with dev options, if user so chooses.
+ 
+ 
