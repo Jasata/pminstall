@@ -9,6 +9,12 @@ Create utu.fi -domain Pate Monitor instance using Dell PC:
 
     # ./writesd.py --device /dev/sdb
 
+### Preparations
+
+ - Clone this repository to a Linux PC. One with built-in MMC SD slot is recommended, althought a PC with USB SD adapter will work too.
+ - Enter the repository directory (`pminstall`), download and extract Rasbian OS image to this directory.
+ - Insert SD card. If USB SD adapter is used, specify `--device ` with the appropriate device file. Find out what it is...
+
 ### Installation Activities (performed by install.py)
 
  - **TODO** Read `boot/install.config` for instance mode (dev|uat|prd specifics still unclear... thus todo)
