@@ -12,6 +12,14 @@
 #   0.2.3   2019-01-21  pmapi setup.py now with --force option.
 #   0.3.0   2019-06-10	Keyboard configuration function added.
 #
+#   TODO - Read /boot/install.config
+#       import configparser
+#       config = configparser.ConfigParser()
+#       config.read('/boot/install.config')
+#       if (config['Config']['mode'] == "DEV"):
+#           (do stuff)
+#
+#
 import os
 import sys
 import platform
@@ -150,6 +158,7 @@ except Exception as e:
 
 #
 # Late imports so that these won't crash the script before checks
+# (especially the python version check)
 #
 import pwd
 import grp
@@ -577,7 +586,7 @@ if __name__ == '__main__':
 
 
     #
-    # Install packages
+    # Install packages (required by Pate Monitor)
     #
     print_step_label("Begin APT package installations...")
     do_or_die("apt -y install " + " ".join(packages))
