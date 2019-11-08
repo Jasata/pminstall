@@ -7,6 +7,7 @@
 
 ### Installation Activities (performed by install.py)
 
+ - **TODO** Read `boot/install.config` for instance mode (dev|uat|prd specifics still unclear... thus todo)
  - Sets system timezone as Europe/Helsinki
  - Sets keymap to `pc105` / `fi`
  - Updates system packages (`apt update`, `apt -y upgrade`)
