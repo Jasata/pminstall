@@ -5,6 +5,10 @@
 **Dependencies:** Python 3.5.3 or newer, PySerial ver 3.2.1 ...<br>
 (There may eventually be Python 3.7 dependancies, as development continues with Debian 10 based system)
 
+Create utu.fi -domain Pate Monitor instance using Dell PC:
+
+    # ./writesd.py --device /dev/sdb
+
 ### Installation Activities (performed by install.py)
 
  - **TODO** Read `boot/install.config` for instance mode (dev|uat|prd specifics still unclear... thus todo)
@@ -32,8 +36,8 @@ A separate script (`writesd.py`) is provided for creating the Raspbian SD along 
     
     optional arguments:
       -h, --help            show this help message and exit
-      -m [MODE], --mode [MODE]
-                            Instance mode. Default: 'DEV'
+      -m MODE, --mode MODE  Instance mode. Default: 'DEV'
+      --device DEVICE       Write to specified device.
       --noddns              Do not add DDNS client into dev instance.
 
 Note that `Config.py` file can be modified to set the default instance mode.
