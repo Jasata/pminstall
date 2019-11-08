@@ -4,6 +4,23 @@
 #
 #   writesd.py - 2018, Jani Tammi <jasata@utu.fi>
 #   0.2.0   2019-11-08  Brought up to date with the writesd-dell.py script.
+#   0.3.0   2019-11-08  Instance mode commandline options. Other improvements.
+#
+#
+#   Commandline options:
+#
+#       -m, --mode      Specify mode for the instance.
+#       --noddns        Do not create DDNS client (default for DEV instance)
+#
+#
+#   For home.net development:
+#       ./writesd.py -m dev --noddns
+#   For utu.fi development:
+#       ./writesd.py -m dev
+#   For UAT or Release:
+#       ./writesd.py -m prd
+#
+#   ...or define the default mode in Config.py
 #
 import os
 import sys
@@ -12,20 +29,7 @@ import argparse
 import subprocess
 
 from Config import Config
-##############################################################################
-# CONFIGURABLE ITEMS BELOW
-#
-#img = "/root/2018-11-13-raspbian-stretch-lite.img"
-#img = "/root/2018-11-13-raspbian-stretch-lite.img"
-#img = "2019-04-08-raspbian-stretch-lite.img"
-img = "2019-09-26-raspbian-buster-lite.img"
 
-# TODO: Make these into get_script_dir() function, which
-# resolves the location of this script. All resources must
-# be relative to this script (unless someday provided via
-# command line parameters)
-pmidir = "/srv/pminstall"
-pminstall_dir = "/srv/pminstall"
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
 __version__ = "0.2.0"
@@ -34,9 +38,15 @@ VERSION = __version__
 HEADER  = """
 =============================================================================
 University of Turku, Department of Future Technologies
-ForeSail-1 / PATE Monitor uSD writer
+ForeSail-1 / uSD writer for Rasbian based PATE Monitor
 Version {}, 2019 {}
 """.format(__version__, __author__)
+
+
+#
+# GLOBAL Application Error (display warning about errors, if set)
+#
+app_error = None
 
 
 ##############################################################################
@@ -45,13 +55,12 @@ Version {}, 2019 {}
 def setup_ddns():
     # assume that the system partion has been mounted to /mnt
     # Step 1 - create the client script with correct user/pass from secret file
-    with open("/mnt/usr/local/bin/dynudns.sh") as file:
-        filecontent = file.read()
-    filecontent.replace("{{user}}", Config.Dev.DDNS.username)
-    filecontent.replace("{{pass}}", Config.Dev.DDNS.password)
-    with open("/mnt/usr/local/bin/dynudns.sh") as file:
-        file.write(filecontent)
-    #do_or_die("cp {}/dev/dynudns.sh /mnt/usr/local/bin".format(pmidir))
+    with open("{}/dev/dynudns.sh".format(Config.script_dir)) as file:
+        content = file.read()
+    content = content.replace("{{user}}", Config.Dev.DDNS.username)
+    content = content.replace("{{pass}}", Config.Dev.DDNS.password)
+    with open("/mnt/usr/local/bin/dynudns.sh", "w+") as file:
+        file.write(content)
 
     # Step 2 - set permissions
     do_or_die("chmod 750 /mnt/usr/local/bin/dynudns.sh")
@@ -74,6 +83,17 @@ def setup_ddns():
     # Step 7 - set cron job permissions
     do_or_die("chmod 755 /mnt/etc/cron.hourly/dynudns")
     # Step 8 - set correct username and password from secret file
+
+
+def smb_setup():
+    #
+    # Copy ´smb.conf´ to /boot (/mnt)
+    # OBSOLETED BY VSC REMOTE - SSH
+    do_or_die(
+        "cp {}/dev/smb.conf /mnt/samba/smb.conf".format(
+            Config.script_dir
+        )
+    )
 
 
 ##############################################################################
@@ -150,12 +170,48 @@ if __name__ == '__main__':
         formatter_class = argparse.RawTextHelpFormatter
     )
     parser.add_argument(
-        '-d',
-        '--dev',
-        help = 'Create development instance.',
+        '-m',
+        '--mode',
+        help    = "Instance mode. Default: '{}'".format(Config.Mode.default),
+        choices = Config.Mode.options,
+        nargs   = '?',
+        dest    = "mode",
+        const   = "DEV",
+        default = Config.Mode.default,
+        type    = str.upper,
+        metavar = "MODE"
+    )
+    parser.add_argument(
+        '--noddns',
+        help = 'Do not add DDNS client into dev instance.',
         action = 'store_true'
     )
     args = parser.parse_args()
+    #
+    # Check selection validity and set Config.Mode.selected
+    #
+    if (args.mode not in Config.Mode.options):
+        print(
+            "Invalid instance mode ('{}')! Check your Config.py!".format(
+                args.mode
+            )
+        )
+        print("Existing...")
+        os._exit(-1)
+    Config.Mode.selected = args.mode
+
+
+    #
+    # Print header
+    #
+    print(HEADER)
+    print(
+        "Creating",
+        Config.Mode.selected,
+        "instance  (use -m {} to change)".format(
+            "[" + "|".join(Config.Mode.options) + "]"
+        )
+    )
 
 
     #
@@ -181,7 +237,12 @@ if __name__ == '__main__':
         "Writing Rasbian image to block device '{}'... ".format(Config.blkdev),
         end = '', flush = True
     )
-    do_or_die("dd if={} of=/dev/{} bs=4M conv=fsync".format(img, Config.blkdev))
+    do_or_die(
+        "dd if={} of=/dev/{} bs=4M conv=fsync".format(
+            Config.image,
+            Config.blkdev
+        )
+    )
     # For unknown reason, immediate mount after dd has high chance of failure.
     # Sleep some...
     time.sleep(3)
@@ -206,24 +267,23 @@ if __name__ == '__main__':
     print("Done!")
 
 
-    #
-    # TODO: Make dev specific
-    #
-    # Copy ´smb.conf´ to /boot (/mnt)
-    print(
-        "Copying PATEMON samba config file... ",
-        end = '', flush = True
-    )
-    do_or_die("cp {}/smb.conf /mnt/".format(Config.script_dir))
-    print("Done!")
-
-
     # Copy ´install.py´ to /boot (/mnt)
     print(
         "Copying PATEMON install script... ",
         end = '', flush = True
     )
     do_or_die("cp {}/install.py /mnt/".format(Config.script_dir))
+    print("Done!")
+
+
+    # (dev | uat | prd) into /boot/install.conf
+    print(
+        "Writing /boot/install.conf ...",
+        end = '', flush = True
+    )
+    with open("/mnt/install.conf", "w+") as file:
+        file.write("[Config]\n")
+        file.write("mode = {}\n".format(Config.Mode.selected))
     print("Done!")
 
 
@@ -240,7 +300,7 @@ if __name__ == '__main__':
     #
     # Dev unit specific details
     #
-    if args.dev:
+    if Config.Mode.selected == "DEV":
         print("=" * 50)
         print("Making development unit specific modifications!",)
         print("=" * 50)
@@ -250,21 +310,38 @@ if __name__ == '__main__':
             )
         do_or_die("mount /dev/{}p2 /mnt".format(Config.blkdev))
         print("Done!")
-        print(
-            "Setting up DDNS...",
-            end = '', flush = True
-            )
-        setup_ddns()
-        print("Done!")
-        print(
-            "Unmounting system partition...",
-            end = '', flush = True
-            )
-        do_or_die("umount /mnt")
-        print("Done!")
+        try:
+            if (not args.noddns):
+                print(
+                    "Setting up DDNS...",
+                    end = '', flush = True
+                    )
+                setup_ddns()
+                print("Done!")
+            # Obsoleted by VSC Remote - SSH
+            #print(
+            #    "Copying PATEMON samba config file... ",
+            #    end = '', flush = True
+            #)
+            #smb_setup()
+            #print("Done!")
+        except Exception as e:
+            app_error = True
+            print(e)
+        finally:
+            # Unmount, succeed or fail
+            print(
+                "Unmounting system partition...",
+                end = '', flush = True
+                )
+            do_or_die("umount /mnt")
+            print("Done!")
         print("=" * 50)
 
 
-    print("PATEMON Rasbian image creation is done!")
+    if (app_error):
+        print("ERROR: Image creation was not entirely successful!")
+    else:
+        print("PATEMON Rasbian image creation is done!")
 
 # EOF
