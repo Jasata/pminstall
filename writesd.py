@@ -5,18 +5,20 @@
 #   writesd.py - 2018, Jani Tammi <jasata@utu.fi>
 #   0.2.0   2019-11-08  Brought up to date with the writesd-dell.py script.
 #   0.3.0   2019-11-08  Instance mode commandline options. Other improvements.
+#   0.3.1   2019-11-08  Add --device option for writing into a specified device
 #
 #
 #   Commandline options:
 #
 #       -m, --mode      Specify mode for the instance.
+#       --device        Block device (disk) to write into.
 #       --noddns        Do not create DDNS client (default for DEV instance)
 #
 #
 #   For home.net development:
 #       ./writesd.py -m dev --noddns
 #   For utu.fi development:
-#       ./writesd.py -m dev
+#       ./writesd.py -m dev --device /dev/sdb
 #   For UAT or Release:
 #       ./writesd.py -m prd
 #
@@ -24,6 +26,7 @@
 #
 import os
 import sys
+import stat
 import time
 import argparse
 import subprocess
@@ -32,7 +35,7 @@ from Config import Config
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -107,7 +110,7 @@ def do_or_die(cmd: list):
 
 
 def get_mmcblkdev() -> str:
-    """Return one (connected) or die."""
+    """If exactly one MMC block device is connected, return that."""
     accepted = ("mmcblk0", "mmcblk1")
     connected = os.listdir("/sys/block")
     mmcblkdevs = [x for x in connected if x in accepted]
@@ -155,6 +158,33 @@ def get_image_file(dir: str) -> str:
         os._exit(-1)
 
 
+def disk_exists(path: str) -> bool:
+    """Simply checks if given path points to a block device. For this reason, both /dev/sda and /dev/sda1 return both true."""
+    try:
+        return stat.S_ISBLK(os.stat(path).st_mode)
+    except:
+        return False
+
+
+#
+# Both of these should check for parition's filesystem...
+#
+def get_boot_partition(blkdev: str) -> str:
+    """Naive implementation. Accepts name only, without '/dev/' path."""
+    if blkdev.startswith("mmcblk"):
+        return "/dev/{}p1".format(blkdev)
+    else:
+        return "/dev/{}1".format(blkdev)
+
+
+def get_root_partition(blkdev: str) -> str:
+    """Naive implementation. Accepts name only, without '/dev/' path."""
+    if blkdev.startswith("mmcblk"):
+        return "/dev/{}p2".format(blkdev)
+    else:
+        return "/dev/{}2".format(blkdev)
+
+
 ##############################################################################
 #
 # MAIN
@@ -174,12 +204,17 @@ if __name__ == '__main__':
         '--mode',
         help    = "Instance mode. Default: '{}'".format(Config.Mode.default),
         choices = Config.Mode.options,
-        nargs   = '?',
+        #nargs   = '+',
         dest    = "mode",
-        const   = "DEV",
         default = Config.Mode.default,
         type    = str.upper,
         metavar = "MODE"
+    )
+    parser.add_argument(
+        '--device',
+        help    = "Write to specified device.",
+        dest    = "write_to_device",
+        metavar = "DEVICE"
     )
     parser.add_argument(
         '--noddns',
@@ -227,9 +262,20 @@ if __name__ == '__main__':
 
 
     #
-    # Retrieve correct block device
+    # Retrieve correct block device (or use specified)
     #
-    Config.blkdev = get_mmcblkdev()
+    if (args.write_to_device):
+        if not disk_exists(args.write_to_device):
+            print(
+                "Specified device '{}' does not exist!".format(
+                    args.write_to_device
+                )
+            )
+            os._exit(-1)
+        Config.blkdev = args.write_to_device.split('/')[-1]
+    else:
+        Config.blkdev = get_mmcblkdev()
+    # Config.blkdev will contain device name only (without '/dev/')
 
 
     # Write image
@@ -254,7 +300,11 @@ if __name__ == '__main__':
         "Mounting SD:/boot into /mnt... ",
         end = '', flush = True
     )
-    do_or_die("mount /dev/{}p1 /mnt".format(Config.blkdev))
+    do_or_die(
+        "mount {} /mnt".format(
+            get_boot_partition(Config.blkdev)
+        )
+    )
     print("Done!")
 
 
@@ -308,7 +358,11 @@ if __name__ == '__main__':
             "Mounting system partition to /mnt...",
             end = '', flush = True
             )
-        do_or_die("mount /dev/{}p2 /mnt".format(Config.blkdev))
+        do_or_die(
+            "mount {} /mnt".format(
+                get_root_partition(Config.blkdev)
+            )
+        )
         print("Done!")
         try:
             if (not args.noddns):
