@@ -126,7 +126,7 @@ if __name__ == '__main__':
     print("Done!")
 
 
-    # Create 'ssh'
+    # Create 'ssh' -file
     print(
         "Enabling SSH server... ",
         end = '', flush = True
@@ -166,7 +166,9 @@ if __name__ == '__main__':
     # Dev unit specific details
     #
     if args.dev:
+        print("=" * 50)
         print("Making development unit specific modifications!",)
+        print("=" * 50)
         print(
             "Mounting system partition to /mnt...",
             end = '', flush = True
@@ -185,6 +187,7 @@ if __name__ == '__main__':
             )
         do_or_die("umount /mnt")
         print("Done!")
+        print("=" * 50)
 
 
     print("PATEMON Rasbian image creation is done!")
