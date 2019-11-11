@@ -5,15 +5,26 @@
 **Dependencies:** Python 3.5.3 or newer, PySerial ver 3.2.1 ...<br>
 (There may eventually be Python 3.7 dependancies, as development continues with Debian 10 based system)
 
-Create utu.fi -domain Pate Monitor instance using Dell PC:
+## Process in Brief
 
-    # ./writesd.py --device /dev/sdb
+  1. Write Rasbian uSD using `writesd.py`
+  2. Boot Raspberry Pi and execute `/boot/install.py` (added by `writesd.py`)
 
-### Preparations
+The main installer (`install.py`) does some system configuration and installs needed software packages before cloning a number of Github repositories and executing a `setup.py` script in each of them.
+
+## Preparations
 
  - Clone this repository to a Linux PC. One with built-in MMC SD slot is recommended, althought a PC with USB SD adapter will work too.
+ - If you need to create development instance or utu.fi network, you need DynuDNS account. Create it and set the username and password in the `writesd.conf` -file.
  - Enter the repository directory (`pminstall`), download and extract Rasbian OS image to this directory.
  - Insert SD card. If USB SD adapter is used, specify `--device ` with the appropriate device file. Find out what it is...
+ - (optional) Review and change `Config.py` settings for defaults better suited for your system.
+
+Create utu.fi -domain Pate Monitor development instance using a PC with USB-uSD adapter:
+
+    # ./writesd.py --device /dev/sdb --mode dev
+
+**But, please be absolutely sure your device file points to a uSD, not a harddisk!**
 
 ### Installation Activities (performed by install.py)
 
