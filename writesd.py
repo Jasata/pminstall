@@ -6,13 +6,16 @@
 #   0.2.0   2019-11-08  Brought up to date with the writesd-dell.py script.
 #   0.3.0   2019-11-08  Instance mode commandline options. Other improvements.
 #   0.3.1   2019-11-08  Add --device option for writing into a specified device
+#   0.3.2   2019-11-11  Changed from 'Config.py'  to 'writesd.conf'.
+#   0.3.3   2019-11-11  Add --ddns option to complement --noddns option.
 #
 #
 #   Commandline options:
 #
-#       -m, --mode      Specify mode for the instance.
-#       --device        Block device (disk) to write into.
-#       --noddns        Do not create DDNS client (default for DEV instance)
+#       -m, --mode      Specify mode for the instance
+#       --device        Block device (disk) to write into
+#       --noddns        Do not create DDNS client
+#       --ddns          Create DDNS client
 #
 #
 #   For home.net development:
@@ -22,7 +25,7 @@
 #   For UAT or Release:
 #       ./writesd.py -m prd
 #
-#   ...or define the default mode in Config.py
+#   ...or define the default mode in 'writesd.config'
 #
 import os
 import sys
@@ -30,12 +33,12 @@ import stat
 import time
 import argparse
 import subprocess
+import configparser
 
-from Config import Config
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.1"
+__version__ = "0.3.3"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -47,21 +50,93 @@ Version {}, 2019 {}
 
 
 #
-# GLOBAL Application Error (display warning about errors, if set)
+# GLOBAL Application Variables
 #
-app_error = None
+class App:
+    error           = None
+    version         = __version__
+    class Script:
+        name        = os.path.basename(__file__)
+        path        = os.path.dirname(os.path.realpath(__file__))
+        config_file = os.path.splitext(__file__)[0] + ".config"
+    class Mode:
+        default     = "PRD"
+        options     = ["DEV", "UAT", "PRD"]
+        selected    = None      # Set in argparse step
+    class DDNS:
+        default_for = ["DEV", "UAT"]
+        username    = None
+        password    = None
+        selected    = None
+    image           = None      # Rasbian image filename
+    blkdev          = None      # Device file to write into
+
+
+def read_config(config_file: str):
+    """Reads the specified config file and updates App configuration."""
+    cfg = configparser.ConfigParser()
+    if file_exists(config_file):
+        try:
+            cfg.read(config_file)
+        except Exception as e:
+            print(e)
+            os._exit(-1)
+    else:
+        print(
+            "Notification: Configuration file '{}' does not exist.".format(
+                os.path.basename(config_file)
+            )
+        )
+        return
+    #
+    # Section "Mode"
+    #
+    try:
+        section = cfg["Mode"]
+        val = section.get("default", App.Mode.default)
+        if val in App.Mode.options:
+            App.Mode.default = val
+        else:
+            print(
+                "{}: WARNING: Invalid Mode.default value! Ignoring...".format(
+                    os.path.basename(config_file)
+                )
+            )
+    except Exception as e:
+        print(e)
+        os._exit(-1)
+    #
+    # Section "DDNS"
+    #
+    try:
+        section = cfg["DDNS"]
+        App.DDNS.username   = section.get("username", App.DDNS.username)
+        App.DDNS.password   = section.get("password", App.DDNS.password)
+        val                 = section.get("enabled modes", App.DDNS.default_for)
+        if val != "":
+            # Strip leading and trailing whitespace, convert to uppercase
+            lst = [ x.strip().upper() for x in val.split(",") ]
+            # Remove duplicates
+            lst = list(dict.fromkeys(lst))
+            # Include only those that are included in mode options -list
+            App.DDNS.default_for = [ x for x in lst if x in App.Mode.options ]
+    except Exception as e:
+        print(e)
+        os._exit(-1)
+
+
 
 
 ##############################################################################
 # DEVELOPMENT INSTANCE SPECIFIC
 #
-def setup_ddns():
+def setup_ddns(path: str, usr: str, pwd: str):
     # assume that the system partion has been mounted to /mnt
     # Step 1 - create the client script with correct user/pass from secret file
-    with open("{}/dev/dynudns.sh".format(Config.script_dir)) as file:
+    with open("{}/dev/dynudns.sh".format(path)) as file:
         content = file.read()
-    content = content.replace("{{user}}", Config.Dev.DDNS.username)
-    content = content.replace("{{pass}}", Config.Dev.DDNS.password)
+    content = content.replace("{{user}}", usr)
+    content = content.replace("{{pass}}", pwd)
     with open("/mnt/usr/local/bin/dynudns.sh", "w+") as file:
         file.write(content)
 
@@ -70,7 +145,7 @@ def setup_ddns():
     # Step 3 - create unit file for systemd service
     do_or_die(
         "cp {}/dev/dynudns.service /mnt/lib/systemd/system/".format(
-            Config.script_dir
+            path
         )
     )
     # Step 4 - set unit file permissions
@@ -80,7 +155,7 @@ def setup_ddns():
     # Step 6 - create an hourly cron job for DDNS updates
     do_or_die(
         "cp {}/dev/dynudns.cronjob /mnt/etc/cron.hourly/dynudns".format(
-            Config.script_dir
+            path
         )
     )
     # Step 7 - set cron job permissions
@@ -88,13 +163,13 @@ def setup_ddns():
     # Step 8 - set correct username and password from secret file
 
 
-def smb_setup():
+def smb_setup(path: str):
     #
     # Copy ´smb.conf´ to /boot (/mnt)
     # OBSOLETED BY VSC REMOTE - SSH
     do_or_die(
         "cp {}/dev/smb.conf /mnt/samba/smb.conf".format(
-            Config.script_dir
+            path
         )
     )
 
@@ -154,7 +229,7 @@ def get_image_file(dir: str) -> str:
                 return img_list[val - 1]
             except:
                 sel = None
-        print("CRITICAL ERROR - EXECTION MUST NEVER REACH THIS POINT!!")
+        print("CRITICAL ERROR - EXECUTION MUST NEVER REACH THIS POINT!!")
         os._exit(-1)
 
 
@@ -185,12 +260,26 @@ def get_root_partition(blkdev: str) -> str:
         return "/dev/{}2".format(blkdev)
 
 
+def file_exists(file: str) -> bool:
+    """Accepts path/file or file and tests if it exists (as a file)."""
+    if os.path.exists(file):
+        if os.path.isfile(file):
+            return True
+    return False
+
+
 ##############################################################################
 #
 # MAIN
 #
 ##############################################################################
 if __name__ == '__main__':
+
+    #
+    # Read .config -file
+    #
+    read_config(App.Script.config_file)
+
 
     #
     # Commandline arguments
@@ -202,11 +291,10 @@ if __name__ == '__main__':
     parser.add_argument(
         '-m',
         '--mode',
-        help    = "Instance mode. Default: '{}'".format(Config.Mode.default),
-        choices = Config.Mode.options,
-        #nargs   = '+',
+        help    = "Instance mode. Default: '{}'".format(App.Mode.default),
+        choices = App.Mode.options,
         dest    = "mode",
-        default = Config.Mode.default,
+        default = App.Mode.default,
         type    = str.upper,
         metavar = "MODE"
     )
@@ -216,24 +304,18 @@ if __name__ == '__main__':
         dest    = "write_to_device",
         metavar = "DEVICE"
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         '--noddns',
-        help = 'Do not add DDNS client into dev instance.',
+        help = 'Do not add DDNS client into the instance.',
+        action = 'store_true'
+    )
+    group.add_argument(
+        '--ddns',
+        help = 'Add DDNS client into the instance.',
         action = 'store_true'
     )
     args = parser.parse_args()
-    #
-    # Check selection validity and set Config.Mode.selected
-    #
-    if (args.mode not in Config.Mode.options):
-        print(
-            "Invalid instance mode ('{}')! Check your Config.py!".format(
-                args.mode
-            )
-        )
-        print("Existing...")
-        os._exit(-1)
-    Config.Mode.selected = args.mode
 
 
     #
@@ -242,27 +324,20 @@ if __name__ == '__main__':
     print(HEADER)
     print(
         "Creating",
-        Config.Mode.selected,
+        App.Mode.selected,
         "instance  (use -m {} to change)".format(
-            "[" + "|".join(Config.Mode.options) + "]"
+            "[" + "|".join(App.Mode.options) + "]"
         )
     )
 
 
     #
-    # Get script directory
+    # Mode validity is checked by argparse. Set App.Mode.selected
     #
-    Config.script_dir = os.path.dirname(os.path.realpath(__file__))
-
-
-    #
-    # Work out Rasbian image files to choose from
-    #
-    Config.image = get_image_file(Config.script_dir)
-
+    App.Mode.selected = args.mode
 
     #
-    # Retrieve correct block device (or use specified)
+    # Block device (SD / disk)
     #
     if (args.write_to_device):
         if not disk_exists(args.write_to_device):
@@ -272,21 +347,49 @@ if __name__ == '__main__':
                 )
             )
             os._exit(-1)
-        Config.blkdev = args.write_to_device.split('/')[-1]
+        App.blkdev = args.write_to_device.split('/')[-1]
     else:
-        Config.blkdev = get_mmcblkdev()
-    # Config.blkdev will contain device name only (without '/dev/')
+        App.blkdev = get_mmcblkdev()
+    # App.blkdev will contain device name only (without '/dev/')
 
 
+    #
+    # Work out Rasbian image files to choose from
+    #
+    App.image = get_image_file(App.Script.path)
+
+
+    #
+    # Resolve if to install DDNS or not
+    #
+    if args.noddns:
+        App.DDNS.selected = False
+    elif args.ddns:
+        App.DDNS.selected = True
+    elif App.Mode.selected in App.DDNS.default_for:
+        App.DDNS.selected = True
+    else:
+        App.DDNS.selected = False
+
+
+
+
+    ###########################################################################
+    #
+    # Write and configure SD / target disk
+    #
+
+    #
     # Write image
+    #
     print(
-        "Writing Rasbian image to block device '{}'... ".format(Config.blkdev),
+        "Writing Rasbian image to block device '{}'... ".format(App.blkdev),
         end = '', flush = True
     )
     do_or_die(
         "dd if={} of=/dev/{} bs=4M conv=fsync".format(
-            Config.image,
-            Config.blkdev
+            App.image,
+            App.blkdev
         )
     )
     # For unknown reason, immediate mount after dd has high chance of failure.
@@ -295,20 +398,24 @@ if __name__ == '__main__':
     print("Done!")
 
 
+    #
     # Mount /boot partition to /mnt
+    #
     print(
         "Mounting SD:/boot into /mnt... ",
         end = '', flush = True
     )
     do_or_die(
         "mount {} /mnt".format(
-            get_boot_partition(Config.blkdev)
+            get_boot_partition(App.blkdev)
         )
     )
     print("Done!")
 
 
+    #
     # Create 'ssh' -file
+    #
     print(
         "Enabling SSH server... ",
         end = '', flush = True
@@ -317,27 +424,34 @@ if __name__ == '__main__':
     print("Done!")
 
 
+    #
     # Copy ´install.py´ to /boot (/mnt)
+    #
     print(
-        "Copying PATEMON install script... ",
+        "Copying /boot/install.py ... ",
         end = '', flush = True
     )
-    do_or_die("cp {}/install.py /mnt/".format(Config.script_dir))
+    do_or_die("cp {}/install.py /mnt/".format(App.Script.path))
     print("Done!")
 
 
+    #
     # (dev | uat | prd) into /boot/install.conf
+    #
     print(
         "Writing /boot/install.conf ...",
         end = '', flush = True
     )
+    # Replace with configparser, if the number of options grow much
     with open("/mnt/install.conf", "w+") as file:
         file.write("[Config]\n")
-        file.write("mode = {}\n".format(Config.Mode.selected))
+        file.write("mode = {}\n".format(App.Mode.selected))
     print("Done!")
 
 
+    #
     # Unmount
+    #
     print(
         "Unmounting /boot partition from /mnt...",
         end = '', flush = True
@@ -347,10 +461,11 @@ if __name__ == '__main__':
     print("Done!")
 
 
+    ###########################################################################
     #
     # Dev unit specific details
     #
-    if Config.Mode.selected == "DEV":
+    if App.Mode.selected == "DEV":
         print("=" * 50)
         print("Making development unit specific modifications!",)
         print("=" * 50)
@@ -360,17 +475,21 @@ if __name__ == '__main__':
             )
         do_or_die(
             "mount {} /mnt".format(
-                get_root_partition(Config.blkdev)
+                get_root_partition(App.blkdev)
             )
         )
         print("Done!")
         try:
-            if (not args.noddns):
+            if (App.DDNS.selected):
                 print(
                     "Setting up DDNS...",
                     end = '', flush = True
                     )
-                setup_ddns()
+                setup_ddns(
+                    App.Script.path,
+                    App.DDNS.username,
+                    App.DDNS.password
+                )
                 print("Done!")
             # Obsoleted by VSC Remote - SSH
             #print(
@@ -380,7 +499,7 @@ if __name__ == '__main__':
             #smb_setup()
             #print("Done!")
         except Exception as e:
-            app_error = True
+            # Print error, but do not stop (need to unmount)
             print(e)
         finally:
             # Unmount, succeed or fail
@@ -393,9 +512,6 @@ if __name__ == '__main__':
         print("=" * 50)
 
 
-    if (app_error):
-        print("ERROR: Image creation was not entirely successful!")
-    else:
-        print("PATEMON Rasbian image creation is done!")
+    print("PATEMON Rasbian image creation is done!")
 
 # EOF
