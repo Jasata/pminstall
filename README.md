@@ -44,7 +44,7 @@ A separate script (`writesd.py`) is provided for creating the Raspbian SD along 
 
 ## Using writesd.py
 
-    usage: writesd.py [-h] [-m [MODE]] [--noddns]
+    usage: writesd.py [-h] [-m [MODE]] [--noddns | --ddns]
     
     =============================================================================
     University of Turku, Department of Future Technologies
