@@ -55,9 +55,10 @@ A separate script (`writesd.py`) is provided for creating the Raspbian SD along 
       -h, --help            show this help message and exit
       -m MODE, --mode MODE  Instance mode. Default: 'DEV'
       --device DEVICE       Write to specified device.
-      --noddns              Do not add DDNS client into dev instance.
+      --noddns              Do not add DDNS client into the instance.
+      --ddns                Add DDNS client into the instance.
 
-Note that `Config.py` file can be modified to set the default instance mode.
+*Note that `writesd.config` file can be modified to set the default instance mode.
 
 ## Manual Rasbian SD Creation
 
