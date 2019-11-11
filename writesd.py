@@ -8,6 +8,7 @@
 #   0.3.1   2019-11-08  Add --device option for writing into a specified device
 #   0.3.2   2019-11-11  Changed from 'Config.py'  to 'writesd.conf'.
 #   0.3.3   2019-11-11  Add --ddns option to complement --noddns option.
+#   0.3.4   2019-11-11  Fixed "Creating [MODE] instance" message.
 #
 #
 #   Commandline options:
@@ -38,7 +39,7 @@ import configparser
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -201,7 +202,7 @@ def get_image_file(dir: str) -> str:
     """If more than one *.img in script directory, let user choose."""
     import glob
     os.chdir(dir)
-    img_list = glob.glob("*.img")
+    img_list = sorted(glob.glob("*.img"))
     if len(img_list) < 1:
         print("NO Rasbian IMAGES IN SCRIPT DIRECTORY!")
         os._exit(-1)
@@ -214,7 +215,7 @@ def get_image_file(dir: str) -> str:
         sel = None
         while (not sel):
             sel = input(
-                "Enter selection (1-{} or ENTER to exit): ".format(
+                "Enter selection (1-{} or empty to exit): ".format(
                     len(img_list)
                 )
             )
@@ -226,7 +227,8 @@ def get_image_file(dir: str) -> str:
                 val = int(sel)
                 if val < 1 or val > len(img_list):
                     sel = None
-                return img_list[val - 1]
+                else:
+                    return img_list[val - 1]
             except:
                 sel = None
         print("CRITICAL ERROR - EXECUTION MUST NEVER REACH THIS POINT!!")
@@ -324,7 +326,7 @@ if __name__ == '__main__':
     print(HEADER)
     print(
         "Creating",
-        App.Mode.selected,
+        args.mode,      # Not yet in App data structure...
         "instance  (use -m {} to change)".format(
             "[" + "|".join(App.Mode.options) + "]"
         )
