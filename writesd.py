@@ -9,6 +9,7 @@
 #   0.3.2   2019-11-11  Changed from 'Config.py'  to 'writesd.conf'.
 #   0.3.3   2019-11-11  Add --ddns option to complement --noddns option.
 #   0.3.4   2019-11-11  Fixed "Creating [MODE] instance" message.
+#   0.3.5   2019-11-11  install.conf changed to install.config.
 #
 #
 #   Commandline options:
@@ -39,7 +40,7 @@ import configparser
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.4"
+__version__ = "0.3.5"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -441,11 +442,11 @@ if __name__ == '__main__':
     # (dev | uat | prd) into /boot/install.conf
     #
     print(
-        "Writing /boot/install.conf ...",
+        "Writing /boot/install.config ...",
         end = '', flush = True
     )
     # Replace with configparser, if the number of options grow much
-    with open("/mnt/install.conf", "w+") as file:
+    with open("/mnt/install.config", "w+") as file:
         file.write("[Config]\n")
         file.write("mode = {}\n".format(App.Mode.selected))
     print("Done!")
