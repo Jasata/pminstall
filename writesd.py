@@ -10,6 +10,7 @@
 #   0.3.3   2019-11-11  Add --ddns option to complement --noddns option.
 #   0.3.4   2019-11-11  Fixed "Creating [MODE] instance" message.
 #   0.3.5   2019-11-11  install.conf changed to install.config.
+#   0.3.6   2019-11-25  DDNS created for non-DEV modes + purge /etc/hostname.
 #
 #
 #   Commandline options:
@@ -40,7 +41,7 @@ import configparser
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.5"
+__version__ = "0.3.6"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -401,6 +402,11 @@ if __name__ == '__main__':
     print("Done!")
 
 
+    ###########################################################################
+    #
+    # /boot partition related items
+    #
+
     #
     # Mount /boot partition to /mnt
     #
@@ -466,53 +472,60 @@ if __name__ == '__main__':
 
     ###########################################################################
     #
-    # Dev unit specific details
+    # / (root) partition related items
     #
-    if App.Mode.selected == "DEV":
-        print("=" * 50)
-        print("Making development unit specific modifications!",)
-        print("=" * 50)
+
+    print(
+        "Mounting SD:/ into /mnt... ",
+        end = '', flush = True
+    )
+    do_or_die(
+        "mount {} /mnt".format(
+            get_root_partition(App.blkdev)
+        )
+    )
+    print("Done!")
+
+
+    #
+    # System accepts DHCP specified hostname, if we have empty /etc/hostname
+    #
+    print(
+        "Clearing /etc/hostname",
+        end = '', flush = True
+    )
+    do_or_die(
+        "echo "" > /mnt/etc/hostname"
+        )
+    )
+    print("Done!")
+
+
+    #
+    # DDNS Client
+    #
+    if App.DDNS.selected:
         print(
-            "Mounting system partition to /mnt...",
+            "Setting up DDNS...",
             end = '', flush = True
-            )
-        do_or_die(
-            "mount {} /mnt".format(
-                get_root_partition(App.blkdev)
-            )
+        )
+        setup_ddns(
+            App.Script.path,
+            App.DDNS.username,
+            App.DDNS.password
         )
         print("Done!")
-        try:
-            if (App.DDNS.selected):
-                print(
-                    "Setting up DDNS...",
-                    end = '', flush = True
-                    )
-                setup_ddns(
-                    App.Script.path,
-                    App.DDNS.username,
-                    App.DDNS.password
-                )
-                print("Done!")
-            # Obsoleted by VSC Remote - SSH
-            #print(
-            #    "Copying PATEMON samba config file... ",
-            #    end = '', flush = True
-            #)
-            #smb_setup()
-            #print("Done!")
-        except Exception as e:
-            # Print error, but do not stop (need to unmount)
-            print(e)
-        finally:
-            # Unmount, succeed or fail
-            print(
-                "Unmounting system partition...",
-                end = '', flush = True
-                )
-            do_or_die("umount /mnt")
-            print("Done!")
-        print("=" * 50)
+
+
+    #
+    # Unmount root partition
+    #
+    print(
+        "Unmounting system partition...",
+        end = '', flush = True
+    )
+    do_or_die("umount /mnt")
+    print("Done!")
 
 
     print("PATEMON Rasbian image creation is done!")
