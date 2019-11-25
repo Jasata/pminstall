@@ -11,6 +11,10 @@
 #   0.3.4   2019-11-11  Fixed "Creating [MODE] instance" message.
 #   0.3.5   2019-11-11  install.conf changed to install.config.
 #   0.3.6   2019-11-25  DDNS created for non-DEV modes + purge /etc/hostname.
+#   0.3.7   2019-11-25  DHCP hook to update DDNS on IP change.
+#   0.3.8   2019-11-25  Moved DDNS related files into this script.
+#   0.3.9   2019-11-25  Warning if DDNS client is requested but no credentials.
+#   0.4.0   2019-11-25  Release version 0.4.0. Mainly a Github thing...
 #
 #
 #   Commandline options:
@@ -41,7 +45,7 @@ import configparser
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.3.6"
+__version__ = "0.4.0"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -75,6 +79,129 @@ class App:
     blkdev          = None      # Device file to write into
 
 
+###############################################################################
+#
+# Various files that may be created
+#
+
+class File:
+    name            = None      # Use real paths, let script prefix with "/mnt"
+    permissions     = None
+    content         = None
+    def __init__(self, name, permissions, content):
+        self.name = name
+        self.permissions = permissions
+        self.content = content
+
+
+
+App.DDNS.dhclient_hook = File(
+    "/etc/dhcp/dhclient-exit-hooks.d/ddnsupdate",
+    0o755,
+    """#!/bin/sh
+#
+NIC="eth0"
+CMD="/usr/local/bin/dynudns.sh"
+
+logger -i "dhclient hook activated!"
+
+# Disregard changes in other interfaces
+[ "$interface" == "${NIC}" ] || exit 0
+
+case "$reason" in
+    BOUND|RENEW|REBIND|REBOOT)
+        if ! [ -x "$(command -v ${CMD})" ]; then
+            logger -t "DDNS" -i "Command ${CMD} not found or not executable!"
+            exit 1
+        fi
+        logger -t "DDNS" -i "$interface: IP change, updating DDNS"
+        (/bin/bash ${CMD}) || logger -t "DDNS" -i "Command ${CMD} failed!"
+        ;;
+esac
+
+# EOF
+"""
+)
+
+App.DDNS.HTML_API_update = File(
+    "/usr/local/bin/dynudns.sh",
+    0x755,
+    """#!/bin/bash
+# 2019.11.07 // Jani Tammi
+# Dynu DNS - Service for dynamic IP
+#
+#    IP Update Protocol
+#    https://www.dynu.com/en-US/DynamicDNS/IP-Update-Protocol
+#
+#    Interface:
+#    http://api.dynu.com/nic/update?myip=${}&username=${}&password=${}
+#      myip            The IP you wish to store into the DDNS
+#      username        The username you gave them when you creaed your account
+#      password        A MD5 sum of the password string
+#
+#    Resposes
+#      nochg           Sent IP was the same that was already stored in the DDNS
+#      good {ip}       String "good" followed by the IP that was sent
+#      (?)             Some response for authentication / other errors
+#
+username="{{user}}"
+password="{{pass}}"
+uri="http://api.dynu.com/nic/update"
+passmd5="$(echo -n ${password} | md5sum - | awk '{print $1;}')"
+ip="$(hostname -I | awk '{print $NF;exit}')"
+uri="${uri}?myip=${ip}&username=${username}&password=${passmd5}"
+
+if [ "${username}" == "" ]; then
+    logger -t "DDNS" -i "DDNS credentials not set! Aborting..."
+    exit 1
+fi
+
+# -s for silent
+reply="$(curl -s ${uri})"
+
+# log entry
+logger -t "DDNS" -i "${uri} : ${reply}"
+
+# EOF
+"""
+)
+
+App.DDNS.cron_job = File(
+    "/etc/cron.hourly/dynudns",
+    0x755,
+    """#!/bin/sh
+#
+# Execute DynuDSN script to update IP into the DDNS
+#
+
+/usr/local/bin/dynudns.sh
+"""
+)
+
+App.DDNS.systemd_service = File(
+    "/lib/systemd/system/dynudns.service",
+    0o644,
+    """[Unit]
+Description=DynuDNS, free dynamic IP service.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/local/bin/dynudns.sh
+
+[Install]
+WantedBy=multi-user.target
+"""
+)
+
+
+
+
+##############################################################################
+#
+# Read <script>.config into App class
+#
 def read_config(config_file: str):
     """Reads the specified config file and updates App configuration."""
     cfg = configparser.ConfigParser()
@@ -131,58 +258,143 @@ def read_config(config_file: str):
 
 
 ##############################################################################
-# DEVELOPMENT INSTANCE SPECIFIC
+#
+# DDNS (Dynamic Domain Name Service)
 #
 def setup_ddns(path: str, usr: str, pwd: str):
     # assume that the system partion has been mounted to /mnt
-    # Step 1 - create the client script with correct user/pass from secret file
-    with open("{}/dev/dynudns.sh".format(path)) as file:
-        content = file.read()
-    content = content.replace("{{user}}", usr)
-    content = content.replace("{{pass}}", pwd)
-    with open("/mnt/usr/local/bin/dynudns.sh", "w+") as file:
-        file.write(content)
+    """Params: path - path to this script, usr & pwd - Dynu DDNS credentials"""
 
-    # Step 2 - set permissions
-    do_or_die("chmod 750 /mnt/usr/local/bin/dynudns.sh")
-    # Step 3 - create unit file for systemd service
-    do_or_die(
-        "cp {}/dev/dynudns.service /mnt/lib/systemd/system/".format(
-            path
-        )
-    )
-    # Step 4 - set unit file permissions
-    do_or_die("chmod 644 /mnt/lib/systemd/system/dynudns.service")
-    # Step 5 - create service linkage for startup on boot time
-    do_or_die("ln -s /lib/systemd/system/dynudns.service /mnt/etc/systemd/system/multi-user.target.wants/dynudns.service")
-    # Step 6 - create an hourly cron job for DDNS updates
-    do_or_die(
-        "cp {}/dev/dynudns.cronjob /mnt/etc/cron.hourly/dynudns".format(
-            path
-        )
-    )
-    # Step 7 - set cron job permissions
-    do_or_die("chmod 755 /mnt/etc/cron.hourly/dynudns")
-    # Step 8 - set correct username and password from secret file
+
+    # Step 1 - create the client script with correct user/pass from secret file
+    #with open("{}/dev/dynudns.sh".format(path)) as file:
+    #    content = file.read()
+    file = App.DDNS.HTML_API_update
+    file.content = file.content.replace("{{user}}", usr)
+    file.content = file.content.replace("{{pass}}", pwd)
+    with open(f"/mnt{file.name}", "w+") as handle:
+        handle.write(file.content)
+    os.chmod(f"/mnt{file.name}", file.permissions)
+
+
+    # Step 2 - create unit file for systemd service
+    file = App.DDNS.systemd_service
+    with open(f"/mnt{file.name}", "w+") as handle:
+        handle.write(file.content)
+    os.chmod(f"/mnt{file.name}", file.permissions)
+
+
+    # Step 3 - enable service by linking it
+    shell("ln -s /lib/systemd/system/dynudns.service /mnt/etc/systemd/system/multi-user.target.wants/dynudns.service")
+
+
+    # Step 4 - create an hourly cron job for DDNS updates
+    file = App.DDNS.cron_job
+    with open(f"/mnt{file.name}", "w+") as handle:
+        handle.write(file.content)
+    os.chmod(f"/mnt{file.name}", file.permissions)
+
+
+    # Step 5 - create DHCP client hook for DDNS update on IP change
+    #          This is very much utu.fi specific feature, where even registered
+    #          NIC will initially begin with bohus IP, receiving a correct one
+    #          from DHCP later (sometimes 5 or 10 minutes after booting).
+    #          Environment like that needs a functionality to update DDNS as
+    #          soon as the IP again changes - and this is it.
+    #
+    file = App.DDNS.dhclient_hook
+    with open(f"/mnt{file.name}", "w+") as handle:
+        handle.write(file.content)
+    os.chmod(f"/mnt{file.name}", file.permissions)
+
+
 
 
 def smb_setup(path: str):
+    """Obsoleted by VSC Remote SSH. Left in case this becomes necessary again."""
+    smb_conf = """[global]
+   workgroup = WORKGROUP
+   dns proxy = no
+   log file = /var/log/samba/log.%m
+   max log size = 1000
+   panic action = /usr/share/samba/panic-action %d
+
+   server role = standalone server
+   passdb backend = tdbsam
+   obey pam restrictions = yes
+   unix password sync = yes
+   passwd program = /usr/bin/passwd %u
+   passwd chat = *Enter\snew\s*\spassword:* %n\n *Retype\snew\s*\spassword:* %n\n *password\supdated\ssuccessfully* .
+   pam password change = yes
+   map to guest = bad user
+   usershare allow guests = yes
+
+[homes]
+   comment = Home Directories
+   browseable = no
+   read only = no
+   create mask = 0700
+   directory mask = 0700
+   valid users = %S
+
+[srv]
+   comment = Working Directory
+   directory = /srv
+   browsable = yes
+   read only = no
+   create mask = 0755
+   directory mask = 0755
+"""
+    with open("/mnt/samba/smb.conf", "w+") as handle:
+        handle.write(smb_conf)
     #
-    # Copy ´smb.conf´ to /boot (/mnt)
-    # OBSOLETED BY VSC REMOTE - SSH
-    do_or_die(
-        "cp {}/dev/smb.conf /mnt/samba/smb.conf".format(
-            path
-        )
-    )
+    # ATTENTION!
+    # This lacks user password creation "smbpasswd" or whatever...
+    # I have no idea where that piece of code was lost. Redo, if needed.
 
 
-##############################################################################
+
+
+###############################################################################
+#
 # COMMON
 #
-def do_or_die(cmd: list):
-    prc = subprocess.run(cmd.split(" "))
-    if prc.returncode:
+
+def getch():
+    """Read single character from standard input without echo."""
+    import sys, tty, termios
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        ch = sys.stdin.read(1)
+    except Exception as e:
+        print(e)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
+
+def yes_or_no(question):
+    c = ""
+    print(question + " (Y/N): ", end = "", flush = True)
+    while c not in ("y", "n"):
+        c = getch().lower()
+    return c == 'y'
+
+
+def shell(cmd: str):
+    """Allow exceptions"""
+    return subprocess.run(cmd.split(" ")).returncode
+
+
+def do_or_die(cmd: str):
+    """Die (exit) on exception or non-zero return code"""
+    try:
+        if shell(cmd):
+            raise ValueError("Non-zero return code!")
+    except Exception as e:
+        print(e)
         print("Command '{}' failed!".format(cmd))
         os._exit(-1)
 
@@ -272,12 +484,25 @@ def file_exists(file: str) -> bool:
     return False
 
 
+
+
+
 ##############################################################################
 #
 # MAIN
 #
 ##############################################################################
 if __name__ == '__main__':
+
+    #
+    # Check that /mnt is not already a mount point
+    #
+    if os.path.ismount("/mnt"):
+        # Auto-unmount is not very wise - it may not be a leftover from us.
+        print("Directory '/mnt' is already mounted!")
+        print("Unmount and rerun this script.")
+        os._exit(1)
+
 
     #
     # Read .config -file
@@ -376,6 +601,19 @@ if __name__ == '__main__':
         App.DDNS.selected = False
 
 
+    #
+    # Warn if DDNS credentials are not set, but DDNS client is requested
+    #
+    if App.DDNS.selected == True and (
+        App.DDNS.username == "" or App.DDNS.password == ""
+    ):
+        print("WARNING! DDNS client is requested, but credentials for it are not set!")
+        if not yes_or_no("Continue without DDNS credentials?"):
+            print("NO")
+            os._exit(0)
+        else:
+            print("YES")
+
 
 
     ###########################################################################
@@ -437,7 +675,7 @@ if __name__ == '__main__':
     # Copy ´install.py´ to /boot (/mnt)
     #
     print(
-        "Copying /boot/install.py ... ",
+        "Copying /boot/install.py... ",
         end = '', flush = True
     )
     do_or_die("cp {}/install.py /mnt/".format(App.Script.path))
@@ -448,7 +686,7 @@ if __name__ == '__main__':
     # (dev | uat | prd) into /boot/install.conf
     #
     print(
-        "Writing /boot/install.config ...",
+        "Writing /boot/install.config... ",
         end = '', flush = True
     )
     # Replace with configparser, if the number of options grow much
@@ -462,7 +700,7 @@ if __name__ == '__main__':
     # Unmount
     #
     print(
-        "Unmounting /boot partition from /mnt...",
+        "Unmounting /boot partition from /mnt... ",
         end = '', flush = True
         )
     do_or_die("umount /mnt")
@@ -474,7 +712,6 @@ if __name__ == '__main__':
     #
     # / (root) partition related items
     #
-
     print(
         "Mounting SD:/ into /mnt... ",
         end = '', flush = True
@@ -487,45 +724,44 @@ if __name__ == '__main__':
     print("Done!")
 
 
-    #
-    # System accepts DHCP specified hostname, if we have empty /etc/hostname
-    #
-    print(
-        "Clearing /etc/hostname",
-        end = '', flush = True
-    )
-    do_or_die(
-        "echo "" > /mnt/etc/hostname"
-        )
-    )
-    print("Done!")
-
-
-    #
-    # DDNS Client
-    #
-    if App.DDNS.selected:
+    try:
+        #
+        # System accepts DHCP specified hostname, if we have empty /etc/hostname
+        #
         print(
-            "Setting up DDNS...",
+            "Clearing /etc/hostname... ",
             end = '', flush = True
         )
-        setup_ddns(
-            App.Script.path,
-            App.DDNS.username,
-            App.DDNS.password
-        )
+        # Gets truncated on open
+        with open("/mnt/etc/hostname", "w") as file:
+            pass
         print("Done!")
 
 
-    #
-    # Unmount root partition
-    #
-    print(
-        "Unmounting system partition...",
-        end = '', flush = True
-    )
-    do_or_die("umount /mnt")
-    print("Done!")
+        #
+        # DDNS Client
+        #
+        if App.DDNS.selected:
+            print(
+                "Setting up DDNS... ",
+                end = '', flush = True
+            )
+            setup_ddns(
+                App.Script.path,
+                App.DDNS.username,
+                App.DDNS.password
+            )
+            print("Done!")
+    finally:
+        #
+        # Unmount root partition
+        #
+        print(
+            "Unmounting system partition... ",
+            end = '', flush = True
+        )
+        do_or_die("umount /mnt")
+        print("Done!")
 
 
     print("PATEMON Rasbian image creation is done!")

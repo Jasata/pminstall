@@ -1,6 +1,0 @@
-#!/bin/sh
-#
-# Execute DynuDSN script to update IP into the DDNS
-#
-
-/usr/local/bin/dynudns.sh

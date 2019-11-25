@@ -87,6 +87,20 @@ Basic Samba installation steps (using provided `smb.conf` file):
 
 Insert uSD to Raspberry Pi, boot, ssh into the box, assume `root` identity (`sudo su -`), run `/boot/install.py`. Unless errors are reported, the system should now be up and running. Open browser on your Pate Monitor address to check.
 
+# DDNS (Dynamic Domain Name Service)
+
+Network environment in UTU provides IP adderesses only to registered MAC addresses (Raspberry Pi's are not registered), and even if they would be, DHCP server leases addresses with the apparent tendency to change every once in awhile (for reasons that I cannot even being to guess). This makes having a headless development unit a nightmare - unless... external DDNS service is used. In this case, [Dynu DNS](https://www.dynu.com/en-US/) was chosen because of its very simple HTTP API. An account was created and an address of `pate.freeddns.org` was created. This host name should hereby resolve to the whichever IP the development unit has at the time.
+
+If another account is created/needed, the credentials should be written into `writesd.config`, from where they will be copied to the DDNS update script, inside the written Rasbian image.
+
+You can control if the DDNS client is included in the written Rasbian image by using `--ddns` or `--noddns` commandline options. By default DDNS client is included in development (DEV) and testing (UAT) installations, but this too can be configured in the `writesd.config`.
+
+## Some implementation details
+
+DDNS service is kept up to date by an hourly `cron` job and by a DH Client hook which executes DDNS client each time `dhclient` indicates a change in the `eth0` interface. The client is also registered as a boot-time system service, which depends on network interface, thus executing once after start-up, once the network interface has been brought up. This _should_ be enough to keep the DDNS record up to date.
+
+For more specific details, `writesd.py` should be examined.
+
 # Change Log
 
 2019.11.04 Updated to Debian 10 based [Raspbian Buster Lite 2019-09-26](https://www.raspberrypi.org/downloads/raspbian/), Python 3.7.3 and PySerial 3.4.
