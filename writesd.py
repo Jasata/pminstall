@@ -17,7 +17,8 @@
 #   0.4.0   2019-11-25  Release version 0.4.0. Mainly a Github thing...
 #   0.4.1   2019-11-26  Modified to Python 3.5 and python version check added.
 #   0.4.2   2019-11-27  Disk device chooser, safe/unsafe information.
-#   0.4.3   2019-11-28  Improved messages on disk unsafety.
+#   0.4.3   2019-11-27  Improved messages on disk unsafety.
+#   0.4.4   2019-11-27  Add report to the end of the process.
 #
 #
 #   Commandline options:
@@ -104,6 +105,10 @@ class App:
         selected    = None
     image           = None      # Rasbian image filename
     blkdev          = None      # Device file to write into
+    summary         = ""        # Report of actions
+    @staticmethod
+    def report(msg: str):
+        App.summary += "  - " + msg + "\n"
 
 
 ###############################################################################
@@ -334,6 +339,15 @@ def setup_ddns(path: str, usr: str, pwd: str):
         handle.write(file.content)
     os.chmod("/mnt" + file.name, file.permissions)
 
+    # Report to App.summary
+    msg = "DDNS client installed"
+    if usr == "" and pwd == "":
+        msg += " (with no credentials!)"
+    elif usr == "":
+        msg += " (with no username!)"
+    elif pwd == "":
+        msg += " (with no password!)"
+    App.report(msg)
 
 
 
@@ -426,19 +440,6 @@ def do_or_die(cmd: str):
         os._exit(-1)
 
 
-# def get_mmcblkdev() -> str:
-#     """If exactly one MMC block device is connected, return that."""
-#     accepted = ("mmcblk0", "mmcblk1")
-#     connected = os.listdir("/sys/block")
-#     mmcblkdevs = [x for x in connected if x in accepted]
-#     # Allow and require only one
-#     if len(mmcblkdevs) < 1:
-#         sys.exit('No MMC block devices connected!')
-#     elif len(mmcblkdevs) > 1:
-#         sys.exit('More than one MMC block devices connected!')
-#     return mmcblkdevs[0]
-
-
 def choose_image_file(dir: str) -> str:
     """If more than one *.img in script directory, let user choose."""
     import glob
@@ -487,8 +488,6 @@ def disk_exists(path: str) -> bool:
         return stat.S_ISBLK(os.stat(path).st_mode)
     except:
         return False
-
-
 
 
 def choose_disk(suggested: str) -> str:
@@ -790,6 +789,9 @@ if __name__ == '__main__':
     # For unknown reason, immediate mount after dd has high chance of failure.
     # Sleep some...
     time.sleep(3)
+    # First, write directly into the App.summary to get differnt kind of indent
+    App.summary = "\n/dev/{}:\n".format(App.blkdev)
+    App.report("Rasbian image '{}'".format(App.image))
     print("Done!")
 
 
@@ -821,6 +823,7 @@ if __name__ == '__main__':
         end = '', flush = True
     )
     do_or_die("touch /mnt/ssh")
+    App.report("SSH server enabled")
     print("Done!")
 
 
@@ -832,6 +835,7 @@ if __name__ == '__main__':
         end = '', flush = True
     )
     do_or_die("cp {}/install.py /mnt/".format(App.Script.path))
+    App.report("/boot/install.py")
     print("Done!")
 
 
@@ -846,6 +850,7 @@ if __name__ == '__main__':
     with open("/mnt/install.config", "w+") as file:
         file.write("[Config]\n")
         file.write("mode = {}\n".format(App.Mode.selected))
+    App.report("/boot/install.config")
     print("Done!")
 
 
@@ -888,6 +893,7 @@ if __name__ == '__main__':
         # Gets truncated on open
         with open("/mnt/etc/hostname", "w") as file:
             pass
+        App.report("/etc/hostname cleared")
         print("Done!")
 
 
@@ -904,7 +910,10 @@ if __name__ == '__main__':
                 App.DDNS.username,
                 App.DDNS.password
             )
+            # setup_ddns() writes the App.report()
             print("Done!")
+    except Exception as e:
+        App.report("EXCEPTION: " + str(e))
     finally:
         #
         # Unmount root partition
@@ -916,7 +925,13 @@ if __name__ == '__main__':
         do_or_die("umount /mnt")
         print("Done!")
 
-
     print("PATEMON Rasbian image creation is done!")
+    print(App.summary)
+    # some sounds to wake user up on completion
+    for _ in range(0, 4):
+        sys.stdout.write('\a')
+        sys.stdout.flush()
+        time.sleep(0.6)
+
 
 # EOF
