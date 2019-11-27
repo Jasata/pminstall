@@ -15,6 +15,8 @@
 #   0.3.8   2019-11-25  Moved DDNS related files into this script.
 #   0.3.9   2019-11-25  Warning if DDNS client is requested but no credentials.
 #   0.4.0   2019-11-25  Release version 0.4.0. Mainly a Github thing...
+#   0.4.1   2019-11-26  Modified to Python 3.5 and python version check added.
+#   0.4.2   2019-11-27  Disk device chooser, safe/unsafe information.
 #
 #
 #   Commandline options:
@@ -42,10 +44,34 @@ import argparse
 import subprocess
 import configparser
 
+# Python 3.5 or newer
+if sys.version_info < (3, 5):
+    import platform
+    print("You need Python 3.5 or newer! ", end = "")
+    print(
+        "You have Python ver.{} on {} {}".format(
+            platform.python_version(),
+            platform.system(),
+            platform.release()
+        )
+    )
+    print(
+        "Are you sure you did not run 'python {}' instead of".format(
+            os.path.basename(__file__)
+        ),
+        end = ""
+    )
+    print(
+        "'python3 {}' or './{}'?".format(
+            os.path.basename(__file__),
+            os.path.basename(__file__)
+        )
+    )
+    os._exit(1)
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.0"
+__version__ = "0.4.2"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -272,16 +298,16 @@ def setup_ddns(path: str, usr: str, pwd: str):
     file = App.DDNS.HTML_API_update
     file.content = file.content.replace("{{user}}", usr)
     file.content = file.content.replace("{{pass}}", pwd)
-    with open(f"/mnt{file.name}", "w+") as handle:
+    with open("/mnt" + file.name, "w+") as handle:
         handle.write(file.content)
-    os.chmod(f"/mnt{file.name}", file.permissions)
+    os.chmod("/mnt" + file.name, file.permissions)
 
 
     # Step 2 - create unit file for systemd service
     file = App.DDNS.systemd_service
-    with open(f"/mnt{file.name}", "w+") as handle:
+    with open("/mnt" + file.name, "w+") as handle:
         handle.write(file.content)
-    os.chmod(f"/mnt{file.name}", file.permissions)
+    os.chmod("/mnt" + file.name, file.permissions)
 
 
     # Step 3 - enable service by linking it
@@ -290,9 +316,9 @@ def setup_ddns(path: str, usr: str, pwd: str):
 
     # Step 4 - create an hourly cron job for DDNS updates
     file = App.DDNS.cron_job
-    with open(f"/mnt{file.name}", "w+") as handle:
+    with open("/mnt" + file.name, "w+") as handle:
         handle.write(file.content)
-    os.chmod(f"/mnt{file.name}", file.permissions)
+    os.chmod("/mnt" + file.name, file.permissions)
 
 
     # Step 5 - create DHCP client hook for DDNS update on IP change
@@ -303,9 +329,9 @@ def setup_ddns(path: str, usr: str, pwd: str):
     #          soon as the IP again changes - and this is it.
     #
     file = App.DDNS.dhclient_hook
-    with open(f"/mnt{file.name}", "w+") as handle:
+    with open("/mnt" + file.name, "w+") as handle:
         handle.write(file.content)
-    os.chmod(f"/mnt{file.name}", file.permissions)
+    os.chmod("/mnt" + file.name, file.permissions)
 
 
 
@@ -412,13 +438,18 @@ def get_mmcblkdev() -> str:
     return mmcblkdevs[0]
 
 
-def get_image_file(dir: str) -> str:
+def choose_image_file(dir: str) -> str:
     """If more than one *.img in script directory, let user choose."""
     import glob
     os.chdir(dir)
     img_list = sorted(glob.glob("*.img"))
     if len(img_list) < 1:
         print("NO Rasbian IMAGES IN SCRIPT DIRECTORY!")
+        print(
+            "Please download from https://downloads.raspberrypi.org/raspbian_lite_latest and extract to '{}' directory".format(
+                dir
+            )
+        )
         os._exit(-1)
     elif len(img_list) == 1:
         return img_list[0]
@@ -457,6 +488,82 @@ def disk_exists(path: str) -> bool:
         return False
 
 
+
+def choose_disk(suggested: str) -> str:
+    """Check and choose disk device to write into"""
+    # User suggested may be None
+    if suggested is not None:
+        if not disk_exists(suggested):
+            print(
+                "Specified device '{}' does not exist!".format(
+                    suggested
+                )
+            )
+            os._exit(-1)
+        elif disk_is_mounted(suggested):
+            print(
+                "Specifield device '{}' has mounted parition(s)!".format(
+                    suggested
+                )
+            )
+            if not yes_or_no("This is unsafe! Continue?"):
+                print("NO")
+                os._exit(0)
+            else:
+                print("YES")
+        return suggested
+
+    # User has not provided target device
+    disks = get_disk_list()
+    # a list of safe disks (not mounted)
+    safes = [ disk for disk in disks if not disk_is_mounted(disk) ]
+
+    if len(safes) == 1 and safes[0].startswith("/dev/mmcblk"):
+        # Only one MMCBLK present, and nothing mounted from it
+        print(
+            "Single mmcblk device detected ('{}') ".format(
+                safes[0]
+            ) + \
+            "and none of its partitions are mounted."
+        )
+        print("Autoselecting '{}'".format(safes[0]))
+        return safes[0]
+
+    # Prompt user to choose
+    print("Choose target device:")
+    for i, disk in enumerate(disks):
+        print("  ", i + 1, disk, "" if disk in safes else "  UNSAFE!")
+    sel = None
+    while (not sel):
+        sel = input(
+            "Enter selection (1-{} or empty to exit): ".format(
+                len(disks)
+            )
+        )
+        # Exit on ENTER (empty)
+        if sel == "":
+            print("Exiting...")
+            os._exit(0)
+        try:
+            val = int(sel)
+            if val < 1 or val > len(disks):
+                sel = None
+            else:
+                if disks[val - 1] not in safes:
+                    if not yes_or_no(
+                        "Choosing mounted disk is VERY unsafe! Continue?"
+                    ):
+                        return choose_disk(None)
+                    else:
+                        print("YES")
+                return disks[val - 1]
+        except:
+            sel = None
+
+    print("CRITICAL ERROR - EXECUTION MUST NEVER REACH THIS POINT!!")
+    os._exit(-1)
+
+
 #
 # Both of these should check for parition's filesystem...
 #
@@ -483,6 +590,36 @@ def file_exists(file: str) -> bool:
             return True
     return False
 
+
+def get_disk_list() -> list:
+    """Using lsblk, create a list of canonical disk names"""
+    import subprocess
+    # -p canonical names, -d no partitions, -r raw (delimited by one space),
+    # -n no header
+    out = subprocess.run(
+        "/bin/lsblk -p -d -r -n".split(),
+        stdout = subprocess.PIPE
+    )
+    stdout = out.stdout.decode('utf-8').strip()
+    return [ dsk[0] for dsk in [ line.split() for line in stdout.split('\n') ]]
+
+
+def disk_is_mounted(disk: str) -> bool:
+    """Return True if specified disk has any partitions that are mounted"""
+    import subprocess
+    # -r raw, -n no header, -x sort (very necessary, disk first)
+    out = subprocess.run(
+        "/bin/lsblk -r -n -x MAJ:MIN {}".format(disk).split(),
+        stdout = subprocess.PIPE
+    )
+    # First line is the disk, strip it, leave partitions
+    stdout = out.stdout.decode('utf-8').strip().split("\n", 1)[1]
+    for partition in [ line.split() for line in stdout.split('\n') ]:
+        assert(partition[1].split(':')[1] != '0') # No disks!
+        # if partition has 7th column, its mounted
+        if len(partition) > 6:
+            return True
+    return False
 
 
 
@@ -567,25 +704,16 @@ if __name__ == '__main__':
 
     #
     # Block device (SD / disk)
+    # Argument is "suggested" device (--device DEVICE)
     #
-    if (args.write_to_device):
-        if not disk_exists(args.write_to_device):
-            print(
-                "Specified device '{}' does not exist!".format(
-                    args.write_to_device
-                )
-            )
-            os._exit(-1)
-        App.blkdev = args.write_to_device.split('/')[-1]
-    else:
-        App.blkdev = get_mmcblkdev()
+    App.blkdev = choose_disk(args.write_to_device).split('/')[-1]
     # App.blkdev will contain device name only (without '/dev/')
 
 
     #
     # Work out Rasbian image files to choose from
     #
-    App.image = get_image_file(App.Script.path)
+    App.image = choose_image_file(App.Script.path)
 
 
     #
@@ -613,7 +741,6 @@ if __name__ == '__main__':
             os._exit(0)
         else:
             print("YES")
-
 
 
     ###########################################################################
