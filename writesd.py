@@ -17,6 +17,7 @@
 #   0.4.0   2019-11-25  Release version 0.4.0. Mainly a Github thing...
 #   0.4.1   2019-11-26  Modified to Python 3.5 and python version check added.
 #   0.4.2   2019-11-27  Disk device chooser, safe/unsafe information.
+#   0.4.3   2019-11-28  Improved messages on disk unsafety.
 #
 #
 #   Commandline options:
@@ -71,7 +72,7 @@ if sys.version_info < (3, 5):
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -425,17 +426,17 @@ def do_or_die(cmd: str):
         os._exit(-1)
 
 
-def get_mmcblkdev() -> str:
-    """If exactly one MMC block device is connected, return that."""
-    accepted = ("mmcblk0", "mmcblk1")
-    connected = os.listdir("/sys/block")
-    mmcblkdevs = [x for x in connected if x in accepted]
-    # Allow and require only one
-    if len(mmcblkdevs) < 1:
-        sys.exit('No MMC block devices connected!')
-    elif len(mmcblkdevs) > 1:
-        sys.exit('More than one MMC block devices connected!')
-    return mmcblkdevs[0]
+# def get_mmcblkdev() -> str:
+#     """If exactly one MMC block device is connected, return that."""
+#     accepted = ("mmcblk0", "mmcblk1")
+#     connected = os.listdir("/sys/block")
+#     mmcblkdevs = [x for x in connected if x in accepted]
+#     # Allow and require only one
+#     if len(mmcblkdevs) < 1:
+#         sys.exit('No MMC block devices connected!')
+#     elif len(mmcblkdevs) > 1:
+#         sys.exit('More than one MMC block devices connected!')
+#     return mmcblkdevs[0]
 
 
 def choose_image_file(dir: str) -> str:
@@ -489,8 +490,19 @@ def disk_exists(path: str) -> bool:
 
 
 
+
 def choose_disk(suggested: str) -> str:
     """Check and choose disk device to write into"""
+    def disk_safety_message(disk: str) -> str:
+        """Verbose reason for not-safe, or empty for safe disks"""
+        mpoints = disk_mountpoints(disk)
+        if "/" in mpoints:
+            return "FATAL! Contains system root partition!"
+        elif len(mpoints) > 0:
+            return "UNSAFE! One or more partitions are mounted"
+        else:
+            return ""
+        # End-of-function
     # User suggested may be None
     if suggested is not None:
         if not disk_exists(suggested):
@@ -532,7 +544,13 @@ def choose_disk(suggested: str) -> str:
     # Prompt user to choose
     print("Choose target device:")
     for i, disk in enumerate(disks):
-        print("  ", i + 1, disk, "" if disk in safes else "  UNSAFE!")
+        print(
+            "{:>4} {:<20} {}".format(
+                i + 1,
+                disk,
+                disk_safety_message(disk)
+            )
+        )
     sel = None
     while (not sel):
         sel = input(
@@ -604,9 +622,10 @@ def get_disk_list() -> list:
     return [ dsk[0] for dsk in [ line.split() for line in stdout.split('\n') ]]
 
 
-def disk_is_mounted(disk: str) -> bool:
-    """Return True if specified disk has any partitions that are mounted"""
+def disk_mountpoints(disk: str) -> list:
+    """Returns a list of mount points, or empty list if none"""
     import subprocess
+    res = []
     # -r raw, -n no header, -x sort (very necessary, disk first)
     out = subprocess.run(
         "/bin/lsblk -r -n -x MAJ:MIN {}".format(disk).split(),
@@ -618,7 +637,14 @@ def disk_is_mounted(disk: str) -> bool:
         assert(partition[1].split(':')[1] != '0') # No disks!
         # if partition has 7th column, its mounted
         if len(partition) > 6:
-            return True
+            res.append(partition[6])
+    return res
+
+
+def disk_is_mounted(disk: str) -> bool:
+    """Return True if specified disk has any partitions that are mounted"""
+    if len(disk_mountpoints(disk)) > 0:
+        return True
     return False
 
 
