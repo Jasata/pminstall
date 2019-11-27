@@ -19,6 +19,7 @@
 #   0.4.2   2019-11-27  Disk device chooser, safe/unsafe information.
 #   0.4.3   2019-11-27  Improved messages on disk unsafety.
 #   0.4.4   2019-11-27  Add report to the end of the process.
+#   0.4.5   2019-11-27  /boot changes now also within try...catch.
 #
 #
 #   Commandline options:
@@ -73,7 +74,7 @@ if sys.version_info < (3, 5):
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.3"
+__version__ = "0.4.5"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -815,55 +816,61 @@ if __name__ == '__main__':
     print("Done!")
 
 
-    #
-    # Create 'ssh' -file
-    #
-    print(
-        "Enabling SSH server... ",
-        end = '', flush = True
-    )
-    do_or_die("touch /mnt/ssh")
-    App.report("SSH server enabled")
-    print("Done!")
-
-
-    #
-    # Copy ´install.py´ to /boot (/mnt)
-    #
-    print(
-        "Copying /boot/install.py... ",
-        end = '', flush = True
-    )
-    do_or_die("cp {}/install.py /mnt/".format(App.Script.path))
-    App.report("/boot/install.py")
-    print("Done!")
-
-
-    #
-    # (dev | uat | prd) into /boot/install.conf
-    #
-    print(
-        "Writing /boot/install.config... ",
-        end = '', flush = True
-    )
-    # Replace with configparser, if the number of options grow much
-    with open("/mnt/install.config", "w+") as file:
-        file.write("[Config]\n")
-        file.write("mode = {}\n".format(App.Mode.selected))
-    App.report("/boot/install.config")
-    print("Done!")
-
-
-    #
-    # Unmount
-    #
-    print(
-        "Unmounting /boot partition from /mnt... ",
-        end = '', flush = True
+    try:
+        #
+        # Create 'ssh' -file
+        #
+        print(
+            "Enabling SSH server... ",
+            end = '', flush = True
         )
-    do_or_die("umount /mnt")
-    time.sleep(3)
-    print("Done!")
+        do_or_die("touch /mnt/ssh")
+        App.report("SSH server enabled")
+        print("Done!")
+
+
+        #
+        # Copy ´install.py´ to /boot (/mnt)
+        #
+        print(
+            "Copying /boot/install.py... ",
+            end = '', flush = True
+        )
+        do_or_die("cp {}/install.py /mnt/".format(App.Script.path))
+        App.report("/boot/install.py")
+        print("Done!")
+
+
+        #
+        # (dev | uat | prd) into /boot/install.conf
+        #
+        print(
+            "Writing /boot/install.config... ",
+            end = '', flush = True
+        )
+        # Replace with configparser, if the number of options grow much
+        with open("/mnt/install.config", "w+") as file:
+            file.write("[Config]\n")
+            file.write("mode = {}\n".format(App.Mode.selected))
+        App.report("/boot/install.config")
+        print("Done!")
+
+    except Exception as e:
+        App.report("EXCEPTION: " + str(e))
+
+    finally:
+        #
+        # Unmount /boot
+        #
+        print(
+            "Unmounting /boot partition from /mnt... ",
+            end = '', flush = True
+            )
+        do_or_die("umount /mnt")
+        # Mounting /mnt immediately after umount sometimes causes errors
+        # Sleeping here will make sure no such errors happen
+        time.sleep(3)
+        print("Done!")
 
 
     ###########################################################################
@@ -912,8 +919,10 @@ if __name__ == '__main__':
             )
             # setup_ddns() writes the App.report()
             print("Done!")
+
     except Exception as e:
         App.report("EXCEPTION: " + str(e))
+
     finally:
         #
         # Unmount root partition
