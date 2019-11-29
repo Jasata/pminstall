@@ -21,6 +21,7 @@
 #   0.4.4   2019-11-27  Add report to the end of the process.
 #   0.4.5   2019-11-27  /boot changes now also within try...catch.
 #   0.4.6   2019-11-29  Require root to run, improved help/messages.
+#   0.4.7   2019-11-29  Handle CTRL-C in choose_* functions.
 #
 #
 #   Commandline options:
@@ -75,11 +76,15 @@ if sys.version_info < (3, 5):
 # Require root
 if os.getuid() != 0:
     print("ERROR: root privileges required!")
-    print("Use: 'sudo su -' or 'su -'")
+    print(
+        "Use: 'sudo {}' (alternatively 'sudo su -' or 'su -')".format(
+            __file__
+        )
+    )
     os._exit(1)
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.6"
+__version__ = "0.4.7"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -467,11 +472,15 @@ def choose_image_file(dir: str) -> str:
             print("  ", i + 1, file)
         sel = None
         while (not sel):
-            sel = input(
-                "Enter selection (1-{} or empty to exit): ".format(
-                    len(img_list)
+            try:
+                sel = input(
+                    "Enter selection (1-{} or empty to exit): ".format(
+                        len(img_list)
+                    )
                 )
-            )
+            except KeyboardInterrupt:
+                print("\nExiting...")
+                os._exit(0)
             # Exit on ENTER (empty)
             if sel == "":
                 print("Exiting...")
@@ -558,11 +567,15 @@ def choose_disk(suggested: str) -> str:
         )
     sel = None
     while (not sel):
-        sel = input(
-            "Enter selection (1-{} or empty to exit): ".format(
-                len(disks)
+        try:
+            sel = input(
+                "Enter selection (1-{} or empty to exit): ".format(
+                    len(disks)
+                )
             )
-        )
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            os._exit(0)
         # Exit on ENTER (empty)
         if sel == "":
             print("Exiting...")
