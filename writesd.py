@@ -962,6 +962,12 @@ if __name__ == '__main__':
 
     print("PATEMON Rasbian image creation is done!")
     print(App.summary)
+    print("You can safely remove the uSD card now.")
+    print("Next:")
+    print("\t1. Insert the uSD into PateMonitor Raspberry and start it up.")
+    print("\t2. Login as pi/raspberry.")
+    print("\t3. Run install.py ('sudo /boot/install.py')")
+    print("\t4. Follow the instructions provided by install.py")
     # some sounds to wake user up on completion
     for _ in range(0, 4):
         sys.stdout.write('\a')
