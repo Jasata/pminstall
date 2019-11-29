@@ -1,8 +1,12 @@
 #! /usr/bin/env python3
 #
-#   Script to write and prepare Rasbian image.
+#   Foresail Project // Turku University
+#   Department of Future Technologies
+#   Embedded Systems Laboratory
 #
-#   writesd.py - 2018, Jani Tammi <jasata@utu.fi>
+#   Script to write and prepare Rasbian image for PateMonitor.
+#
+#   writesd.py - 2018-2019, Jani Tammi <jasata@utu.fi>
 #   0.2.0   2019-11-08  Brought up to date with the writesd-dell.py script.
 #   0.3.0   2019-11-08  Instance mode commandline options. Other improvements.
 #   0.3.1   2019-11-08  Add --device option for writing into a specified device
@@ -91,7 +95,7 @@ HEADER  = """
 =============================================================================
 University of Turku, Department of Future Technologies
 ForeSail-1 / uSD writer for Rasbian based PATE Monitor
-Version {}, 2019 {}
+Version {}, 2018-2019 {}
 """.format(__version__, __author__)
 
 
