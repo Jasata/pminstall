@@ -20,6 +20,7 @@
 #   0.4.3   2019-11-27  Improved messages on disk unsafety.
 #   0.4.4   2019-11-27  Add report to the end of the process.
 #   0.4.5   2019-11-27  /boot changes now also within try...catch.
+#   0.4.6   2019-11-29  Require root to run, improved help/messages.
 #
 #
 #   Commandline options:
@@ -71,10 +72,14 @@ if sys.version_info < (3, 5):
         )
     )
     os._exit(1)
-
+# Require root
+if os.getuid() != 0:
+    print("ERROR: root privileges required!")
+    print("Use: 'sudo su -' or 'su -'")
+    os._exit(1)
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.5"
+__version__ = "0.4.6"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -354,7 +359,7 @@ def setup_ddns(path: str, usr: str, pwd: str):
 
 def smb_setup(path: str):
     """Obsoleted by VSC Remote SSH. Left in case this becomes necessary again."""
-    smb_conf = """[global]
+    smb_conf = r"""[global]
    workgroup = WORKGROUP
    dns proxy = no
    log file = /var/log/samba/log.%m
@@ -663,7 +668,7 @@ if __name__ == '__main__':
     if os.path.ismount("/mnt"):
         # Auto-unmount is not very wise - it may not be a leftover from us.
         print("Directory '/mnt' is already mounted!")
-        print("Unmount and rerun this script.")
+        print("Unmount ('umount /mnt') and re-run this script.")
         os._exit(1)
 
 
@@ -762,6 +767,10 @@ if __name__ == '__main__':
         App.DDNS.username == "" or App.DDNS.password == ""
     ):
         print("WARNING! DDNS client is requested, but credentials for it are not set!")
+        print("Tip: Add DDNS username and password into '{}'.".format(
+                App.Script.config_file
+            )
+        )
         if not yes_or_no("Continue without DDNS credentials?"):
             print("NO")
             os._exit(0)
