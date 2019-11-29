@@ -26,6 +26,7 @@
 #   0.4.5   2019-11-27  /boot changes now also within try...catch.
 #   0.4.6   2019-11-29  Require root to run, improved help/messages.
 #   0.4.7   2019-11-29  Handle CTRL-C in choose_* functions.
+#   0.4.8   2019-11-29  DH Client Hook script fixed.
 #
 #
 #   Commandline options:
@@ -87,8 +88,9 @@ if os.getuid() != 0:
     )
     os._exit(1)
 
+
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.7"
+__version__ = "0.4.8"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -141,28 +143,36 @@ class File:
         self.content = content
 
 
-
+# Rasbian runs dhcpcd, thus hooks go into:
+# /lib/dhcpcd/dhcpcd-hooks
+# (NOT /etc/dhcp/dhclient-exit-hooks.d)
 App.DDNS.dhclient_hook = File(
-    "/etc/dhcp/dhclient-exit-hooks.d/ddnsupdate",
+    "/lib/dhcpcd/dhcpcd-hooks/ddnsupdate",
     0o755,
-    """#!/bin/sh
+    """#!/bin/bash
+# Option '-i' for logger is useless because it will be the PID of the logger,
+# not this script! (every line has higher PID....)
 #
+TAG="DH client hook"
 NIC="eth0"
 CMD="/usr/local/bin/dynudns.sh"
 
-logger -i "dhclient hook activated!"
+#logger -t "${TAG}" "dhclient hook activated! (if: ${interface}  reason: ${reason})"
 
 # Disregard changes in other interfaces
-[ "$interface" == "${NIC}" ] || exit 0
+if [ "$interface" != "$NIC" ]; then
+        #logger -t "${TAG}" "Not my interface: '${interface}' != '${NIC}'"
+        exit 0
+fi
 
 case "$reason" in
     BOUND|RENEW|REBIND|REBOOT)
         if ! [ -x "$(command -v ${CMD})" ]; then
-            logger -t "DDNS" -i "Command ${CMD} not found or not executable!"
+            logger -t "${TAG}" "Command ${CMD} not found or not executable!"
             exit 1
         fi
-        logger -t "DDNS" -i "$interface: IP change, updating DDNS"
-        (/bin/bash ${CMD}) || logger -t "DDNS" -i "Command ${CMD} failed!"
+        logger -t "${TAG}" "$interface: IP change, updating DDNS"
+        (/bin/bash ${CMD}) || logger -t "${TAG}" "Command ${CMD} failed!"
         ;;
 esac
 
@@ -216,7 +226,7 @@ logger -t "DDNS" -i "${uri} : ${reply}"
 App.DDNS.cron_job = File(
     "/etc/cron.hourly/dynudns",
     0x755,
-    """#!/bin/sh
+    """#!/bin/bash
 #
 # Execute DynuDSN script to update IP into the DDNS
 #
