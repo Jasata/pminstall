@@ -20,6 +20,7 @@
 #   0.4.3   2019-11-27  Improved messages on disk unsafety.
 #   0.4.4   2019-11-27  Add report to the end of the process.
 #   0.4.5   2019-11-27  /boot changes now also within try...catch.
+#   0.4.6   2019-12-08  Add .bashrc (git-prompt) customisation.
 #
 #
 #   Commandline options:
@@ -74,7 +75,7 @@ if sys.version_info < (3, 5):
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.5"
+__version__ = "0.4.6"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -648,7 +649,35 @@ def disk_is_mounted(disk: str) -> bool:
     return False
 
 
+def customise_bash(home: str):
+    """Bash customization for user specfied via 'home' directory argument."""
+    content = "\n\n\n# Added by {} ver.{}\n\n".format(
+        App.Script.name,
+        App.version
+    )
+    content += r"""git_status() {
+    STATUS=$(git status 2>/dev/null |
+    awk '
+    /^On branch / {printf($3)}
+    /^You are currently rebasing/ {printf("rebasing %s", $6)}
+    /^Initial commit/ {printf(" (init)")}
+    /^Untracked files/ {printf("|+")}
+    /^Changes not staged / {printf("|?")}
+    /^Changes to be committed/ {printf("|*")}
+    /^Your branch is ahead of/ {printf("|^")}
+    ')
+    """
+    content += """[ -n "$STATUS" ] &&  echo -ne " [$STATUS]"\n"""
+    content += "}\n\n"
+    content += r"""PS1='\[\033[0;32m\]\[\033[0m\033[0;32m\]\u\[\033[0;36m\]@\h:\w\[\033[0;32m\]$(git_status)\[\033[0m\033[0;32m\] \$\[\033[0m\033[0;32m\]\[\033[0m\] '"""
 
+    rcfile = f"{home}/.bashrc"
+    try:
+        with open(rcfile, "a") as rc:
+            rc.write(content)
+    except:
+        print(f"ERROR: Unable to open '{rcfile}'! Does not exist?")
+        raise
 
 ##############################################################################
 #
@@ -918,7 +947,22 @@ if __name__ == '__main__':
                 App.DDNS.password
             )
             # setup_ddns() writes the App.report()
+            # BECAUSE the message changes depending on
+            # which credentials were found while doing it.
             print("Done!")
+
+
+        #
+        # Bash customisation for user 'pi'
+        #
+        print(
+            "Customising Bash prompt for user 'pi'...",
+            end = '', flush = True
+        )
+        customise_bash("/mnt/home/pi")
+        App.report("User 'pi' Bash prompt customised")
+        print("Done!")
+
 
     except Exception as e:
         App.report("EXCEPTION: " + str(e))
