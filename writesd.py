@@ -29,6 +29,7 @@
 #   0.4.8   2019-11-29  DH Client Hook script fixed.
 #   0.4.9   2019-12-08  Add .bashrc (git-prompt) customisation.
 #   0.4.10  2019-12-08  Fixed root privilege check location & message.
+#   0.5.0   2019-12-08  Add SSH key copying.
 #
 #
 #   Commandline options:
@@ -83,7 +84,7 @@ if sys.version_info < (3, 5):
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.10"
+__version__ = "0.5.0"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -113,6 +114,8 @@ class App:
         username    = None
         password    = None
         selected    = None
+    class SSHKeys:
+        selected    = True
     image           = None      # Rasbian image filename
     blkdev          = None      # Device file to write into
     summary         = ""        # Report of actions
@@ -695,13 +698,42 @@ def customise_bash(home: str):
     content += "}\n\n"
     content += r"""PS1='\[\033[0;32m\]\[\033[0m\033[0;32m\]\u\[\033[0;36m\]@\h:\w\[\033[0;32m\]$(git_status)\[\033[0m\033[0;32m\] \$\[\033[0m\033[0;32m\]\[\033[0m\] '"""
 
-    rcfile = f"{home}/.bashrc"
+    rcfile = "{}/.bashrc".format(home)
     try:
         with open(rcfile, "a") as rc:
             rc.write(content)
     except:
-        print(f"ERROR: Unable to open '{rcfile}'! Does not exist?")
+        print("ERROR: Unable to open '{}'! Does not exist?".format(rcfile))
         raise
+
+
+def copy_ssh(home: str):
+    """If './ssh/' directory is present, copies its content to '{home}/.ssh'. Return a list of copied files, or empty list if the source directory existed but contained no files. Returns None if source directory does not exist."""
+    src = "{}/ssh".format(App.Script.path)
+    tgt = "{}/.ssh".format(home)
+    lst = []
+    if not os.path.isdir(src):
+        return None
+    # get UID and GID for home - use them to set ownerships
+    home_info = os.stat(home) # raises FileNotFoundError if necessary
+    # Create target directory, if necessary
+    if not os.path.isdir(tgt):
+        os.mkdir(tgt, 0o755)
+        os.chown(tgt, home_info.st_uid, home_info.st_gid)
+    # loop over files in source
+    for filename in os.listdir(src):
+        import shutil
+        shutil.copy("{}/{}".format(src, filename), tgt)
+        os.chown(
+            "{}/{}".format(tgt, filename),
+            home_info.st_uid,
+            home_info.st_gid
+        )
+        lst.append(filename)
+    return lst
+
+
+
 
 ##############################################################################
 #
@@ -760,6 +792,13 @@ if __name__ == '__main__':
         help = 'Add DDNS client into the instance.',
         action = 'store_true'
     )
+    parser.add_argument(
+        '-s',
+        '--nokeys',
+        help    = 'Do not copy SSH keys.',
+        action  = 'store_true',
+        dest    = 'nokeys'
+    )
     args = parser.parse_args()
 
 
@@ -789,6 +828,13 @@ if __name__ == '__main__':
             "[" + "|".join(App.Mode.options) + "]"
         )
     )
+
+
+    #
+    # Disable ssh/ -files copy?
+    #
+    if args.nokeys:
+        App.SSHKeys.selected = False
 
 
     #
@@ -1007,8 +1053,34 @@ if __name__ == '__main__':
         print("Done!")
 
 
+        #
+        # Copy ssh -keys
+        #
+        if  App.SSHKeys.selected:
+            if os.path.isdir(App.Script.path + "/ssh"):
+                print(
+                    "Copying SSH keys...",
+                    end = "", flush = True
+                )
+                files = copy_ssh("/mnt/home/pi")
+                print("Done!")
+                App.report("SSH keys copied: {}".format(", ".join(files)))
+            else:
+                print(
+                    "SSH keys directory '{}' not found. Skipping!".format(
+                        App.Script.path + "/ssh"
+                    )
+                )
+                App.report(
+                    "No SSH keys copied. '{}' does not exist.".format(
+                        App.Script.path + "/ssh"
+                    )
+                )
+
+
     except Exception as e:
         App.report("EXCEPTION: " + str(e))
+        raise
 
     finally:
         #
