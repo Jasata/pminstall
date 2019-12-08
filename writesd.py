@@ -1,8 +1,12 @@
 #! /usr/bin/env python3
 #
-#   Script to write and prepare Rasbian image.
+#   Foresail Project // Turku University
+#   Department of Future Technologies
+#   Embedded Systems Laboratory
 #
-#   writesd.py - 2018, Jani Tammi <jasata@utu.fi>
+#   Script to write and prepare Rasbian image for PateMonitor.
+#
+#   writesd.py - 2018-2019, Jani Tammi <jasata@utu.fi>
 #   0.2.0   2019-11-08  Brought up to date with the writesd-dell.py script.
 #   0.3.0   2019-11-08  Instance mode commandline options. Other improvements.
 #   0.3.1   2019-11-08  Add --device option for writing into a specified device
@@ -20,7 +24,10 @@
 #   0.4.3   2019-11-27  Improved messages on disk unsafety.
 #   0.4.4   2019-11-27  Add report to the end of the process.
 #   0.4.5   2019-11-27  /boot changes now also within try...catch.
-#   0.4.6   2019-12-08  Add .bashrc (git-prompt) customisation.
+#   0.4.6   2019-11-29  Require root to run, improved help/messages.
+#   0.4.7   2019-11-29  Handle CTRL-C in choose_* functions.
+#   0.4.8   2019-11-29  DH Client Hook script fixed.
+#   0.4.9   2019-12-08  Add .bashrc (git-prompt) customisation.
 #
 #
 #   Commandline options:
@@ -72,17 +79,26 @@ if sys.version_info < (3, 5):
         )
     )
     os._exit(1)
+# Require root
+if os.getuid() != 0:
+    print("ERROR: root privileges required!")
+    print(
+        "Use: 'sudo {}' (alternatively 'sudo su -' or 'su -')".format(
+            __file__
+        )
+    )
+    os._exit(1)
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.6"
+__version__ = "0.4.9"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
 =============================================================================
 University of Turku, Department of Future Technologies
 ForeSail-1 / uSD writer for Rasbian based PATE Monitor
-Version {}, 2019 {}
+Version {}, 2018-2019 {}
 """.format(__version__, __author__)
 
 
@@ -128,28 +144,36 @@ class File:
         self.content = content
 
 
-
+# Rasbian runs dhcpcd, thus hooks go into:
+# /lib/dhcpcd/dhcpcd-hooks
+# (NOT /etc/dhcp/dhclient-exit-hooks.d)
 App.DDNS.dhclient_hook = File(
-    "/etc/dhcp/dhclient-exit-hooks.d/ddnsupdate",
+    "/lib/dhcpcd/dhcpcd-hooks/ddnsupdate",
     0o755,
-    """#!/bin/sh
+    """#!/bin/bash
+# Option '-i' for logger is useless because it will be the PID of the logger,
+# not this script! (every line has higher PID....)
 #
+TAG="DH client hook"
 NIC="eth0"
 CMD="/usr/local/bin/dynudns.sh"
 
-logger -i "dhclient hook activated!"
+#logger -t "${TAG}" "dhclient hook activated! (if: ${interface}  reason: ${reason})"
 
 # Disregard changes in other interfaces
-[ "$interface" == "${NIC}" ] || exit 0
+if [ "$interface" != "$NIC" ]; then
+        #logger -t "${TAG}" "Not my interface: '${interface}' != '${NIC}'"
+        exit 0
+fi
 
 case "$reason" in
     BOUND|RENEW|REBIND|REBOOT)
         if ! [ -x "$(command -v ${CMD})" ]; then
-            logger -t "DDNS" -i "Command ${CMD} not found or not executable!"
+            logger -t "${TAG}" "Command ${CMD} not found or not executable!"
             exit 1
         fi
-        logger -t "DDNS" -i "$interface: IP change, updating DDNS"
-        (/bin/bash ${CMD}) || logger -t "DDNS" -i "Command ${CMD} failed!"
+        logger -t "${TAG}" "$interface: IP change, updating DDNS"
+        (/bin/bash ${CMD}) || logger -t "${TAG}" "Command ${CMD} failed!"
         ;;
 esac
 
@@ -203,7 +227,7 @@ logger -t "DDNS" -i "${uri} : ${reply}"
 App.DDNS.cron_job = File(
     "/etc/cron.hourly/dynudns",
     0x755,
-    """#!/bin/sh
+    """#!/bin/bash
 #
 # Execute DynuDSN script to update IP into the DDNS
 #
@@ -355,7 +379,7 @@ def setup_ddns(path: str, usr: str, pwd: str):
 
 def smb_setup(path: str):
     """Obsoleted by VSC Remote SSH. Left in case this becomes necessary again."""
-    smb_conf = """[global]
+    smb_conf = r"""[global]
    workgroup = WORKGROUP
    dns proxy = no
    log file = /var/log/samba/log.%m
@@ -463,11 +487,15 @@ def choose_image_file(dir: str) -> str:
             print("  ", i + 1, file)
         sel = None
         while (not sel):
-            sel = input(
-                "Enter selection (1-{} or empty to exit): ".format(
-                    len(img_list)
+            try:
+                sel = input(
+                    "Enter selection (1-{} or empty to exit): ".format(
+                        len(img_list)
+                    )
                 )
-            )
+            except KeyboardInterrupt:
+                print("\nExiting...")
+                os._exit(0)
             # Exit on ENTER (empty)
             if sel == "":
                 print("Exiting...")
@@ -554,11 +582,15 @@ def choose_disk(suggested: str) -> str:
         )
     sel = None
     while (not sel):
-        sel = input(
-            "Enter selection (1-{} or empty to exit): ".format(
-                len(disks)
+        try:
+            sel = input(
+                "Enter selection (1-{} or empty to exit): ".format(
+                    len(disks)
+                )
             )
-        )
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            os._exit(0)
         # Exit on ENTER (empty)
         if sel == "":
             print("Exiting...")
@@ -692,7 +724,7 @@ if __name__ == '__main__':
     if os.path.ismount("/mnt"):
         # Auto-unmount is not very wise - it may not be a leftover from us.
         print("Directory '/mnt' is already mounted!")
-        print("Unmount and rerun this script.")
+        print("Unmount ('umount /mnt') and re-run this script.")
         os._exit(1)
 
 
@@ -791,6 +823,10 @@ if __name__ == '__main__':
         App.DDNS.username == "" or App.DDNS.password == ""
     ):
         print("WARNING! DDNS client is requested, but credentials for it are not set!")
+        print("Tip: Add DDNS username and password into '{}'.".format(
+                App.Script.config_file
+            )
+        )
         if not yes_or_no("Continue without DDNS credentials?"):
             print("NO")
             os._exit(0)
@@ -980,6 +1016,12 @@ if __name__ == '__main__':
 
     print("PATEMON Rasbian image creation is done!")
     print(App.summary)
+    print("You can safely remove the uSD card now.")
+    print("Next:")
+    print("\t1. Insert the uSD into PateMonitor Raspberry and start it up.")
+    print("\t2. Login as pi/raspberry.")
+    print("\t3. Run install.py ('sudo /boot/install.py')")
+    print("\t4. Follow the instructions provided by install.py")
     # some sounds to wake user up on completion
     for _ in range(0, 4):
         sys.stdout.write('\a')
