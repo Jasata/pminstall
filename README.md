@@ -1,9 +1,9 @@
 # PATE Monitor Installation Script
 
 **Target platform:** Raspberry Pi 3 B+<br>
-**Target OS:** Rasbian 2018-11-13 or newer<br>
-**Dependencies:** Python 3.5.3 or newer, PySerial ver 3.2.1 ...<br>
-(There may eventually be Python 3.7 dependancies, as development continues with Debian 10 based system)
+**Target OS:** Rasbian 2019-09-26 or newer<br>
+**Dependencies:** Python 3.7.3 or newer, PySerial ver 3.2.1 ...<br>
+**NOTE:** `writesd.py` can be used with Python 3.5.3+ (Debian Stretch 9), but the Rasbian OS **must** be Debian 10 based.
 
 ## Process in Brief
 
@@ -44,12 +44,12 @@ A separate script (`writesd.py`) is provided for creating the Raspbian SD along 
 
 ## Using writesd.py
 
-    usage: writesd.py [-h] [-m [MODE]] [--noddns | --ddns]
+    usage: writesd.py [-h] [-m MODE] [--device DEVICE] [--noddns | --ddns]
     
     =============================================================================
     University of Turku, Department of Future Technologies
     ForeSail-1 / uSD writer for Rasbian based PATE Monitor
-    Version 0.3.0, 2019 Jani Tammi <jasata@utu.fi>
+    Version 0.4.9, 2018-2019 Jani Tammi <jasata@utu.fi>
     
     optional arguments:
       -h, --help            show this help message and exit
@@ -58,9 +58,11 @@ A separate script (`writesd.py`) is provided for creating the Raspbian SD along 
       --noddns              Do not add DDNS client into the instance.
       --ddns                Add DDNS client into the instance.
 
-*Note that `writesd.config` file can be modified to set the default instance mode.
+*Note that `writesd.config` file can be modified to set the default instance mode. It should also be modified to include DDNS client credentials, if DDNS client is to be used.*
 
 ## Manual Rasbian SD Creation
+
+This is the *very minimal* that needs to be done. Further details, if interested, should be read from the `writeds.py`.
 
  1. Write Rasbian image into an SD. (`dd if=${rasbian_image} of=/dev/mmcblk0 bs=4M conv=fsync`)
  2. Mount `/dev/mmcblk0p1` (aka. "boot") to `/mnt` and create file `/mnt/ssh` (to enable remote SSH connections).
