@@ -28,6 +28,7 @@
 #   0.4.7   2019-11-29  Handle CTRL-C in choose_* functions.
 #   0.4.8   2019-11-29  DH Client Hook script fixed.
 #   0.4.9   2019-12-08  Add .bashrc (git-prompt) customisation.
+#   0.4.10  2019-12-08  Fixed root privilege check location & message.
 #
 #
 #   Commandline options:
@@ -79,19 +80,10 @@ if sys.version_info < (3, 5):
         )
     )
     os._exit(1)
-# Require root
-if os.getuid() != 0:
-    print("ERROR: root privileges required!")
-    print(
-        "Use: 'sudo {}' (alternatively 'sudo su -' or 'su -')".format(
-            __file__
-        )
-    )
-    os._exit(1)
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.4.9"
+__version__ = "0.4.10"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -769,6 +761,21 @@ if __name__ == '__main__':
         action = 'store_true'
     )
     args = parser.parse_args()
+
+
+    #
+    # Require root user
+    # Checked here so that non-root user can still get help displayed
+    #
+    if os.getuid() != 0:
+        parser.print_help(sys.stderr)
+        print("ERROR: root privileges required!")
+        print(
+            "Use: 'sudo {}' (alternatively 'sudo su -' or 'su -')".format(
+                App.Script.name
+            )
+        )
+        os._exit(1)
 
 
     #
