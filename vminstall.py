@@ -73,10 +73,34 @@ class ConfigFile:
         self.permissions    = permissions
         self.content        = content
     def create(self, overwrite = False, createdirs = True):
+        def createpath(path, uid, gid, permissions = 0o775):
+            """Give path part only as an argument"""
+            head, tail = os.path.split(path)
+            if not tail:
+                head, tail = os.path.split(head)
+            if head and tail and not os.path.exists(head):
+                try:
+                    createpath(head)
+                except FileExistsError:
+                    pass
+                cdir = os.curdir
+                if isinstance(tail, bytes):
+                    cdir = bytes(os.curdir, 'ASCII')
+                if tail == cdir:
+                    return
+            try:
+                os.mkdir(path, permissions)
+                # This is added - ownership equal to file ownership
+                os.chown(path, uid, gid)
+            except OSError:
+                if not os.path.isdir(path):
+                    raise
+        # Begin create()
         if createdirs:
             path = os.path.split(self.name)[0]
             if path:
-                os.makedirs(path, exist_ok = True)
+                createpath(path, self._uid, self._gid)
+                #os.makedirs(path, exist_ok = True)
         mode = "x" if not overwrite else "w+"
         with open(self.name, mode) as file:
             file.write(self.content)
@@ -498,6 +522,7 @@ if __name__ == '__main__':
                 raise
             finally:
                 cursor.close()
+        do_or_die("chown pi.pi " + database_file)
 
 
         #
