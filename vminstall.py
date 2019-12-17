@@ -7,9 +7,16 @@
 #
 #   MUST have Python 3.5+ (subprocess.run())
 #
+# Not requires, but good to know:
+#   Python 3.6+ required for f-strings & insertion-ordered dicts
+#   Python 3.7+ Guaranteed ordered dicts across implementations
+#
 import os
 import sys
+import pwd
+import grp
 import getpass
+import sqlite3
 import logging
 import platform
 import argparse
@@ -31,13 +38,22 @@ Version {}, 2019 {}
 class Config:
     logging_level = "DEBUG"
 
-class File:
-    """As everything in this script, assumes superuser privileges."""
-    name            = None      # full path and name
-    owner           = None      # str 'user'
-    group           = None      # str 'group'
-    permissions     = None      # Octal; 0o644
-    content         = None      # String, since we don't deal with binary
+class ConfigFile:
+    """As everything in this script, assumes superuser privileges. Only filename and content are required. User and group will default to effective user and group values on creation time and permissions default to common text file permissions wrxwr-wr- (0o644).
+    Properties:
+    name            str     Full path and name
+    owner           str     Username ('pi', 'www-data', etc)
+    group           str     Group ('pi', ...)
+    uid             int     User ID
+    gid             int     Group ID
+    permissions     int     File permissions. Use octal; 0o644
+    content         str     This class was written to handle config files
+
+    Once properties and content are satisfactory, write the file to disk:
+    myFile = File(...)
+    myFile.create(overwrite = True)
+    If you wish the write to fail when the target file already exists, just leave out the 'overwrite'.
+    """
     def __init__(
         self,
         name: str,
@@ -46,21 +62,26 @@ class File:
         group: str = None,
         permissions: int = 0o644
     ):
-        owner = getpass.getuser() if not owner else owner
-        group = grp.getgrgid(pwd.getpwnam(owner).pw_gid).gr_name if not group else group
+        # Default to effective UID/GID
+        owner = pwd.getpwuid(os.geteuid()).pw_name if not owner else owner
+        group = grp.getgrgid(os.getegid()).gr_name if not group else group
         self.name           = name
         self._owner         = owner
         self._group         = group
-        self.uid            = pwd.getpwnam(owner).pw_uid
-        self.gid            = grp.getgrnam(group).gr_gid
+        self._uid           = pwd.getpwnam(owner).pw_uid
+        self._gid           = grp.getgrnam(group).gr_gid
         self.permissions    = permissions
         self.content        = content
-    def create(self, overwrite = False):
+    def create(self, overwrite = False, createdirs = True):
+        if createdirs:
+            path = os.path.split(self.name)[0]
+            if path:
+                os.makedirs(path, exist_ok = True)
         mode = "x" if not overwrite else "w+"
         with open(self.name, mode) as file:
             file.write(self.content)
         os.chmod(self.name, self.permissions)
-        os.chown(self.name, self.uid, self.gid)
+        os.chown(self.name, self._uid, self._gid)
     def replace(self, key: str, value: str):
         self.content = self.content.replace(key, value)
     @property
@@ -68,15 +89,38 @@ class File:
         return self._owner
     @owner.setter
     def owner(self, name: str):
-        self.uid            = pwd.getpwnam(name).pw_uid
+        self._uid           = pwd.getpwnam(name).pw_uid
         self._owner         = name
     @property
     def group(self) -> str:
         return self._group
     @group.setter
     def group(self, name: str):
-        self.gid            = grp.getgrnam(name).gr_gid
+        self._gid           = grp.getgrnam(name).gr_gid
         self._group         = name
+    @property
+    def uid(self) -> int:
+        return self._uid
+    @uid.setter
+    def uid(self, uid: int):
+        self._uid           = uid
+        self._owner         = pwd.getpwuid(uid).pw_name
+    @property
+    def gid(self) -> int:
+        return self._gid
+    @gid.setter
+    def gid(self, gid: int):
+        self._gid           = gid
+        self._group         = grp.getgrgid(gid).gr_name
+    def __str__(self):
+        return "{} {}({}).{}({}) {} '{}'". format(
+            oct(self.permissions),
+            self._owner, self._uid,
+            self._group, self._gid,
+            self.name,
+            (self.content[:20] + '..') if len(self.content) > 20 else self.content
+        )
+
 
 packages = [
     "nginx",
@@ -96,25 +140,48 @@ packages = [
 
 files = {}
 
-files['nginx.site'] = File(
+files['nginx.site'] = ConfigFile(
     '/etc/nginx/sites-available/vm.utu.fi',
     """
+#ssl_certificate /etc/ssl/certs/ftdev_utu_fi_bundle.pem;
+#ssl_certificate_key /etc/ssl/private/ftdev.utu.fi-rsa.key;
+#gzip off;
+
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
+    listen 80;
+    listen [::]:80;
+    listen 443 ssl;
+    listen [::]:443;
+
+    error_log /var/log/nginx/vm.utu.fi.error.log warn;
+    access_log /var/log/nginx/vm.utu.fi.access.log;
 
     root /var/www/vm.utu.fi;
-    server_name _;
- 
+    server_name vm.utu.fi;
+    index index.html;
+
     location / {
         include uwsgi_params;
         uwsgi_pass unix:/run/uwsgi/app/vm.utu.fi/vm.utu.fi.socket;
     }
+    location /sqlite/ {
+        #return 200 "location sqlite";
+        alias /usr/share/phpliteadmin/;
+        index /sqlite/phpliteadmin.php;
+        location ~ \.php$ {
+            include fastcgi_params;
+            fastcgi_pass unix:/run/php/php7.2-fpm.sock;
+            # It is recommended to use $request_filename with alias
+            fastcgi_param SCRIPT_FILENAME $request_filename;
+            #fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        }
+    }
 }
+
 """
 )
 
-files['uwsgi.ini'] = File(
+files['uwsgi.ini'] = ConfigFile(
     '/etc/uwsgi/apps-available/vm.utu.fi.ini',
     """
 [uwsgi]
@@ -152,7 +219,7 @@ die-on-term = true
 """
 )
 
-files['flask.conf'] = File(
+files['flask.conf'] = ConfigFile(
     '/var/www/vm.utu.fi/instance/application.conf',
     """
 # -*- coding: utf-8 -*-
@@ -217,6 +284,7 @@ ALLOWED_EXTENSIONS      = ['ova', 'img', 'zip', 'jpg', 'png']  # Use lowercase!
     'pi', 'www-data'
 )
 
+
 ###############################################################################
 # FUNCTIONS ETC
 
@@ -238,16 +306,17 @@ class Identity():
 
 
 
-def do_or_die(cmd: str):
+def do_or_die(cmd: str, out = subprocess.DEVNULL):
+    """call do_or_die("ls", out = None), if you want output"""
     prc = subprocess.run(
         cmd.split(" "),
-        stdout = subprocess.DEVNULL,
-        stderr = subprocess.DEVNULL
+        stdout = out,
+        stderr = out
     )
     if prc.returncode:
         log.error("Command '{}' failed!".format(cmd))
         raise ValueError("{} from: {}".format(prc.returncode, cmd))
-        #os._exit(-1)
+        #os._exit(-1)  # Previously this just literally died here...
 
 
 def localize_timezone():
@@ -326,6 +395,14 @@ if __name__ == '__main__':
     log.setLevel(getattr(logging, args.logging_level))
 
 
+    log.info(
+        "vm.utu.fi DEV Installer / {} version {}".format(
+            os.path.basename(__file__),
+            __version__
+        )
+    )
+
+
     try:
         #
         # BASIC
@@ -389,6 +466,7 @@ if __name__ == '__main__':
         # TODO: use git@github.com/jasata/utu-vm-site.git
         #       ..but that requires a key (or perhaps )
         #
+        log.info("Cloning vm.utu.fi from GitHub")
         with Identity('pi'):
             do_or_die("git clone https://github.com/jasata/utu-vm-site /var/www/vm.utu.fi")
 
@@ -396,19 +474,36 @@ if __name__ == '__main__':
         #
         # Create instance/application.conf
         #
-        files['Flask.conf'].replace('{{secret_key}}', str(os.urandom(24))
-        files['Flask.conf'].create()
+        log.info("Creating configuration file for Flask application instance")
+        files['flask.conf'].replace('{{secret_key}}', str(os.urandom(24)))
+        files['flask.conf'].create()
 
 
         #
         # Create application.sqlite3
         #
-        pass
+        log.info("Creating application database")
+        script_file     = '/var/www/vm.utu.fi/create.sql'
+        database_file   = '/var/www/vm.utu.fi/application.sqlite3'
+        with    open(script_file, "r") as file, \
+                sqlite3.connect(database_file) as db:
+            script = file.read()
+            cursor = db.cursor()
+            try:
+                cursor.executescript(script)
+                db.commit()
+            except Exception as e:
+                log.exception(str(e))
+                log.exception("SQL script failed!")
+                raise
+            finally:
+                cursor.close()
 
 
         #
         # Only now can the nginx and uwsgi services be restarted
         #
+        log.info("Restarting uwsgi and nginx")
         do_or_die("systemctl restart uwsgi")
         do_or_die("systemctl restart nginx")
 
