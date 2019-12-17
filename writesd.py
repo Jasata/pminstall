@@ -660,7 +660,11 @@ def disk_mountpoints(disk: str) -> list:
         stdout = subprocess.PIPE
     )
     # First line is the disk, strip it, leave partitions
-    stdout = out.stdout.decode('utf-8').strip().split("\n", 1)[1]
+    try:
+        stdout = out.stdout.decode('utf-8').strip().split("\n", 1)[1]
+    except IndexError:
+        # No partitions in the disk!
+        return []
     for partition in [ line.split() for line in stdout.split('\n') ]:
         assert(partition[1].split(':')[1] != '0') # No disks!
         # if partition has 7th column, its mounted
@@ -1049,7 +1053,7 @@ if __name__ == '__main__':
             end = '', flush = True
         )
         customise_bash("/mnt/home/pi")
-        App.report("User 'pi' Bash prompt customised")
+        App.report("Bash prompt for user 'pi' given Git customisation")
         print("Done!")
 
 
