@@ -9,6 +9,7 @@
 #
 import os
 import sys
+import getpass
 import logging
 import platform
 import argparse
@@ -30,6 +31,52 @@ Version {}, 2019 {}
 class Config:
     logging_level = "DEBUG"
 
+class File:
+    """As everything in this script, assumes superuser privileges."""
+    name            = None      # full path and name
+    owner           = None      # str 'user'
+    group           = None      # str 'group'
+    permissions     = None      # Octal; 0o644
+    content         = None      # String, since we don't deal with binary
+    def __init__(
+        self,
+        name: str,
+        content: str,
+        owner: str = None,
+        group: str = None,
+        permissions: int = 0o644
+    ):
+        owner = getpass.getuser() if not owner else owner
+        group = grp.getgrgid(pwd.getpwnam(owner).pw_gid).gr_name if not group else group
+        self.name           = name
+        self._owner         = owner
+        self._group         = group
+        self.uid            = pwd.getpwnam(owner).pw_uid
+        self.gid            = grp.getgrnam(group).gr_gid
+        self.permissions    = permissions
+        self.content        = content
+    def create(self, overwrite = False):
+        mode = "x" if not overwrite else "w+"
+        with open(self.name, mode) as file:
+            file.write(self.content)
+        os.chmod(self.name, self.permissions)
+        os.chown(self.name, self.uid, self.gid)
+    def replace(self, key: str, value: str):
+        self.content = self.content.replace(key, value)
+    @property
+    def owner(self) -> str:
+        return self._owner
+    @owner.setter
+    def owner(self, name: str):
+        self.uid            = pwd.getpwnam(name).pw_uid
+        self._owner         = name
+    @property
+    def group(self) -> str:
+        return self._group
+    @group.setter
+    def group(self, name: str):
+        self.gid            = grp.getgrnam(name).gr_gid
+        self._group         = name
 
 packages = [
     "nginx",
@@ -47,8 +94,11 @@ packages = [
 #  python3-setuptools
 #  libssl-dev
 
-# /etc/nginx/sites-available/vm.utu.fi
-ngimx_vhost = """
+files = {}
+
+files['nginx.site'] = File(
+    '/etc/nginx/sites-available/vm.utu.fi',
+    """
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -62,10 +112,11 @@ server {
     }
 }
 """
+)
 
-
-# /etc/uwsgi/apps-available/vm.utu.fi.ini
-uwsgi_app = """
+files['uwsgi.ini'] = File(
+    '/etc/uwsgi/apps-available/vm.utu.fi.ini',
+    """
 [uwsgi]
 plugins = python3
 module = application
@@ -99,11 +150,72 @@ vacuum = true
 # the expected behavior:
 die-on-term = true
 """
+)
 
-# Flask: instance/application.conf
-application_conf = """
-"""
+files['flask.conf'] = File(
+    '/var/www/vm.utu.fi/instance/application.conf',
+    """
+# -*- coding: utf-8 -*-
+#
+# Turku University (2019) Department of Future Technologies
+# Website for Course Virtualization Project
+# Flask application configuration
+#
+# application.conf - Jani Tammi <jasata@utu.fi>
+#
+#   0.1.0   2019.12.07  Initial version.
+#
+#
+# See http://flask.pocoo.org/docs/0.12/config/ for built-in config values.
+#
+#
+import os
+import logging
 
+DEBUG                    = True
+SESSION_COOKIE_NAME      = 'session'
+SECRET_KEY               = {{secret_key}}
+EXPLAIN_TEMPLATE_LOADING = True
+TOP_LEVEL_DIR            = os.path.abspath(os.curdir)
+BASEDIR                  = os.path.abspath(os.path.dirname(__file__))
+
+
+#
+# Command table configuration (seconds)
+#
+COMMAND_TIMEOUT         = 0.5
+COMMAND_POLL_INTERVAL   = 0.2
+
+
+#
+# Flask app logging
+#
+LOG_FILENAME             = 'application.log'
+LOG_LEVEL                = 'DEBUG'      # DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+
+#
+# SQLite3 configuration
+#
+SQLITE3_DATABASE_FILE   = 'application.sqlite3'
+
+
+#
+# Flask email
+#
+
+
+#
+# File upload
+#
+UPLOAD_FOLDER           = '/var/www/vm.utu.fi/upload/unprocessed'
+ALLOWED_EXTENSIONS      = ['ova', 'img', 'zip', 'jpg', 'png']  # Use lowercase!
+
+# EOF
+
+""",
+    'pi', 'www-data'
+)
 
 ###############################################################################
 # FUNCTIONS ETC
@@ -257,8 +369,9 @@ if __name__ == '__main__':
         # Create Virtual Host into Nginx
         #
         log.info("Creating virtual host into Nginx")
-        with open("/etc/nginx/sites-available/vm.utu.fi", "w") as f:
-            f.write(ngimx_vhost)
+        files['nginx.site'].create()
+        #with open("/etc/nginx/sites-available/vm.utu.fi", "w") as f:
+        #    f.write(ngimx_vhost)
         do_or_die("ln -s /etc/nginx/sites-available/vm.utu.fi /etc/nginx/sites-enabled/vm.utu.fi")
 
 
@@ -266,8 +379,9 @@ if __name__ == '__main__':
         # Configure uswgi
         #
         log.info("Creating uWSGI application config")
-        with open("/etc/uwsgi/apps-available/vm.utu.fi.ini", "w") as f:
-            f.write(uwsgi_app)
+        files['uwsgi.ini'].create()
+        #with open("/etc/uwsgi/apps-available/vm.utu.fi.ini", "w") as f:
+        #    f.write(uwsgi_app)
         do_or_die("ln -s /etc/uwsgi/apps-available/vm.utu.fi.ini /etc/uwsgi/apps-enabled/vm.utu.fi.ini")
 
 
@@ -282,7 +396,8 @@ if __name__ == '__main__':
         #
         # Create instance/application.conf
         #
-        pass
+        files['Flask.conf'].replace('{{secret_key}}', str(os.urandom(24))
+        files['Flask.conf'].create()
 
 
         #
