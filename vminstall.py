@@ -4,6 +4,7 @@
 #
 #   mvinstall.py - 2019, Jani Tammi <jasata@utu.fi>
 #   0.1.0   2019-12-16  Initial version.
+#   0.1.1   2019-12-19  Install and configure phpLiteAdmin
 #
 #   MUST have Python 3.5+ (subprocess.run())
 #
@@ -24,7 +25,7 @@ import datetime
 import subprocess
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -155,7 +156,13 @@ packages = [
     "git",
     "sqlite3",
     "uwsgi",
-    "uwsgi-plugin-python3"
+    "uwsgi-plugin-python3",
+    "php7.2",
+    "php7.2-fpm",
+    "php7.2-sqlite3",
+    "php7.2-mbstring",
+    "phpliteadmin",
+    "phpliteadmin-themes"
 ]
 # DUBIOUS:
 #  libffi-dev
@@ -331,16 +338,30 @@ class Identity():
 
 
 def do_or_die(cmd: str, out = subprocess.DEVNULL):
-    """call do_or_die("ls", out = None), if you want output"""
+    """call do_or_die("ls", out = None), if you want output. Alternatively, subprocess.PIPE will also work."""
     prc = subprocess.run(
         cmd.split(" "),
         stdout = out,
         stderr = out
     )
+    if out == subprocess.PIPE:
+        print(prc.stdout.decode("utf-8"))
+        print(prc.stderr.decode("utf-8"))
     if prc.returncode:
-        log.error("Command '{}' failed!".format(cmd))
-        raise ValueError("{} from: {}".format(prc.returncode, cmd))
-        #os._exit(-1)  # Previously this just literally died here...
+        #print("Command '{}' failed!".format(cmd))
+        raise ValueError("code {}, command: {}".format(prc.returncode, cmd))
+
+#def do_or_die(cmd: str, out = subprocess.DEVNULL):
+#    """call do_or_die("ls", out = None), if you want output"""
+#    prc = subprocess.run(
+#        cmd.split(" "),
+#        stdout = out,
+#        stderr = out
+#    )
+#    if prc.returncode:
+#        log.error("Command '{}' failed!".format(cmd))
+#        raise ValueError("{} from: {}".format(prc.returncode, cmd))
+#        #os._exit(-1)  # Previously this just literally died here...
 
 
 def localize_timezone():
@@ -452,6 +473,58 @@ if __name__ == '__main__':
 
 
         #
+        # Generate SSH keys
+        #
+        log.info("Generating SSH keys...")
+        try:
+            os.remove("/home/pi/.ssh/id_rsa")
+        except FileNotFoundError:
+            pass
+        try:
+            os.remove("/home/pi/.ssh/id_rsa.pub")
+        except FileNotFoundError:
+            pass
+        with Identity("pi"):
+            do_or_die(
+                'ssh-keygen -b 4096 -t rsa -f /home/pi/.ssh/id_rsa -q -N ""'
+            ) # out = subprocess.PIPE
+        log.info("SSH keys generated!")
+
+
+        #
+        # Setup phpLiteAdmin (pla)
+        #       The variables may or may not be commented out,
+        #       thus we match '//' before the variable name.
+        #
+        pla_pwd     = "indiscretion"
+        pla_dir     = "/var/www/vm.utu.fi"
+        import re
+        r_pwd       = re.compile('^.*(\/\/)?.*\$password.*=')
+        r_dir       = re.compile('^.*(\/\/)?.*\$directory.*=')
+        r_theme     = re.compile('^.*(\/\/)?.*\$theme.*=')
+        cfg         = "/etc/phpliteadmin.config.php"
+        old         = cfg + ".original"
+        try:
+            os.remove(old)
+        except FileNotFoundError:
+            pass
+        os.rename(cfg, old)
+        with    open(old, "r") as src, \
+                open(cfg, "w") as tgt:
+            for line in src:
+                if r_pwd.search(line):
+                    tgt.write("$password = '{}';\n".format(pla_pwd))
+                elif r_dir.search(line):
+                    tgt.write("$directory = '{}';\n".format(pla_dir))
+                elif r_theme.search(line):
+                    tgt.write("$theme = 'phpliteadmin.css';\n")
+                else:
+                    tgt.write(line)
+        # Link a theme
+        do_or_die("ln -s -f /usr/share/phpliteadmin/themes/Modern/phpliteadmin.css /usr/share/phpliteadmin/phpliteadmin.css")
+
+
+        #
         # Add user 'www-data' to group 'pi'
         #
         log.info("Adding user 'www-data' to group 'pi'")
@@ -536,6 +609,17 @@ if __name__ == '__main__':
     except Exception as e:
         log.exception(e)
         log.error("Install script FAILED!!")
+        os._exit(1)
 
+
+    print("vm.utu.fi development instance creation completed")
+    print("NOTE: Remember to create hosts -file entry for vm.utu.fi!")
+    print("")
+    print(
+        "http://vm.utu.fi/sqlite/  SQLite3 database admin (pwd: '{}')".format(
+            pla_pwd
+        )
+    )
+    print("http://vm.utu.fi/       Site index")
 
 # EOF
