@@ -5,6 +5,7 @@
 #   mvinstall.py - 2019, Jani Tammi <jasata@utu.fi>
 #   0.1.0   2019-12-16  Initial version.
 #   0.1.1   2019-12-19  Install and configure phpLiteAdmin
+#   0.2.0   2019-12-20  SSL Cert generation and Nginx config update
 #
 #   MUST have Python 3.5+ (subprocess.run())
 #
@@ -25,7 +26,7 @@ import datetime
 import subprocess
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -176,11 +177,17 @@ files['nginx.site'] = ConfigFile(
     """
 #ssl_certificate /etc/ssl/certs/ftdev_utu_fi_bundle.pem;
 #ssl_certificate_key /etc/ssl/private/ftdev.utu.fi-rsa.key;
-#gzip off;
+ssl_certificate /etc/ssl/certs/vm.utu.fi.crt;
+ssl_certificate_key /etc/ssl/private/vm.utu.fi.key;
 
 server {
-    listen 80;
-    listen [::]:80;
+    listen       80;
+    listen       [::]:80;
+    server_name  vm.utu.fi;
+    return       301 https://vm.utu.fi$request_uri;
+}
+
+server {
     listen 443 ssl;
     listen [::]:443;
 
@@ -522,6 +529,14 @@ if __name__ == '__main__':
                     tgt.write(line)
         # Link a theme
         do_or_die("ln -s -f /usr/share/phpliteadmin/themes/Modern/phpliteadmin.css /usr/share/phpliteadmin/phpliteadmin.css")
+
+
+        #
+        # Create self-signed SSL certificate for Nginx
+        #
+        log.info("Generating self-signed SSL certificate for Nginx")
+        do_or_die('openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 -subj "/C=FI/ST=./L=./O=./CN=vm.utu.fi" -keyout /etc/ssl/private/vm.utu.fi.key -out /etc/ssl/certs/vm.utu.fi.crt')
+
 
 
         #
