@@ -6,6 +6,7 @@
 #   0.1.0   2019-12-16  Initial version.
 #   0.1.1   2019-12-19  Install and configure phpLiteAdmin
 #   0.2.0   2019-12-20  SSL Cert generation and Nginx config update
+#   0.2.1   2019-12-20  Fix SSL certificate generation -subj argument
 #
 #   MUST have Python 3.5+ (subprocess.run())
 #
@@ -26,7 +27,7 @@ import datetime
 import subprocess
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -482,7 +483,7 @@ if __name__ == '__main__':
         #
         # Generate SSH keys
         #
-        log.info("Generating SSH keys...")
+        log.info("Generating SSH keys for user 'pi'...")
         try:
             os.remove("/home/pi/.ssh/id_rsa")
         except FileNotFoundError:
@@ -533,9 +534,12 @@ if __name__ == '__main__':
 
         #
         # Create self-signed SSL certificate for Nginx
+        # NOTE: the -subj argument would need to be quoted (") as a shell
+        #       command, but when fed to subprocess, it cannot be, as it
+        #       would retain the quotation marks.
         #
         log.info("Generating self-signed SSL certificate for Nginx")
-        do_or_die('openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 -subj "/C=FI/ST=./L=./O=./CN=vm.utu.fi" -keyout /etc/ssl/private/vm.utu.fi.key -out /etc/ssl/certs/vm.utu.fi.crt')
+        do_or_die("openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 -subj /C=FI/ST=./L=./O=./CN=vm.utu.fi -keyout /etc/ssl/private/vm.utu.fi.key -out /etc/ssl/certs/vm.utu.fi.crt")
 
 
 
@@ -635,6 +639,6 @@ if __name__ == '__main__':
             pla_pwd
         )
     )
-    print("http://vm.utu.fi/       Site index")
+    print("http://vm.utu.fi/         Site index")
 
 # EOF
