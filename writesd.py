@@ -116,12 +116,79 @@ class App:
         selected    = None
     class SSHKeys:
         selected    = True
+    class Installer:
+        files       = "install.py"
     image           = None      # Rasbian image filename
     blkdev          = None      # Device file to write into
     summary         = ""        # Report of actions
     @staticmethod
     def report(msg: str):
         App.summary += "  - " + msg + "\n"
+    @staticmethod
+    def read_config(cfgfile: str = None):
+        """Reads the specified config file and updates App configuration."""
+        cfg = configparser.ConfigParser()
+        if not cfgfile:
+            cfgfile = App.Script.config_file
+        if file_exists(cfgfile):
+            try:
+                cfg.read(cfgfile)
+            except Exception as e:
+                print(e)
+                os._exit(-1)
+        else:
+            print(
+                "Notification: Configuration file '{}' does not exist.".format(
+                    os.path.basename(cfgfile)
+                )
+            )
+            return
+        #
+        # Section "Mode"
+        #
+        try:
+            section = cfg["Mode"]
+            val = section.get("default", App.Mode.default)
+            if val in App.Mode.options:
+                App.Mode.default = val
+            else:
+                print(
+                    "{}: WARNING: Invalid Mode.default value! Ignoring...".format(
+                        os.path.basename(config_file)
+                    )
+                )
+        except Exception as e:
+            print(e)
+            os._exit(-1)
+        #
+        # Section "DDNS"
+        #
+        try:
+            section = cfg["DDNS"]
+            App.DDNS.username   = section.get("username", App.DDNS.username)
+            App.DDNS.password   = section.get("password", App.DDNS.password)
+            val                 = section.get("enabled modes", App.DDNS.default_for)
+            if val != "":
+                # Strip leading and trailing whitespace, convert to uppercase
+                lst = [ x.strip().upper() for x in val.split(",") ]
+                # Remove duplicates
+                lst = list(dict.fromkeys(lst))
+                # Include only those that are included in mode options -list
+                App.DDNS.default_for = [ x for x in lst if x in App.Mode.options ]
+        except Exception as e:
+            print(e)
+            os._exit(-1)
+        #
+        # Section "Installer"
+        #
+        try:
+            section = cfg["Installer"]
+            App.Installer.files = section.get("files", App.Installer.files)
+        except Exception as e:
+            print(e)
+            os._exit(-1)
+
+
 
 
 ###############################################################################
@@ -759,7 +826,8 @@ if __name__ == '__main__':
     #
     # Read .config -file
     #
-    read_config(App.Script.config_file)
+    App.read_config()
+    #read_config(App.Script.config_file)
 
 
     #
@@ -953,13 +1021,15 @@ if __name__ == '__main__':
 
         #
         # Copy ´install.py´ to /boot (/mnt)
-        #
-        print(
-            "Copying /boot/install.py... ",
-            end = '', flush = True
-        )
-        do_or_die("cp {}/install.py /mnt/".format(App.Script.path))
-        App.report("/boot/install.py")
+        #  [f.strip() for f in App.Installer.files.split(",")]
+        print("Copying installer script(s)... ")
+        for installer in [f.strip() for f in App.Installer.files.split(",")]:
+            # Unless absolute, prefix with script directory
+            if installer[:1] != '/':
+                installer = App.Script.path + "/" + installer
+            print("\t{}... ".format(installer))
+            do_or_die("cp {} /mnt/".format(installer))
+            App.report("/boot/{}".format(os.path.basename(installer)))
         print("Done!")
 
 
@@ -976,6 +1046,7 @@ if __name__ == '__main__':
             file.write("mode = {}\n".format(App.Mode.selected))
         App.report("/boot/install.config")
         print("Done!")
+
 
     except Exception as e:
         App.report("EXCEPTION: " + str(e))
