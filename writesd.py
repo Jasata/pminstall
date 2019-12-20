@@ -30,6 +30,9 @@
 #   0.4.9   2019-12-08  Add .bashrc (git-prompt) customisation.
 #   0.4.10  2019-12-08  Fixed root privilege check location & message.
 #   0.5.0   2019-12-08  Add SSH key copying.
+#   0.6.0   2019-12-20  Add .gitconfig creation, configurable copy of
+#                       installation scripts to /boot ("Installer" in
+#                       the writesd.config file).
 #
 #
 #   Commandline options:
@@ -84,7 +87,7 @@ if sys.version_info < (3, 5):
 
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -116,6 +119,10 @@ class App:
         selected    = None
     class SSHKeys:
         selected    = True
+    class Git:
+        name        = None
+        email       = None
+        editor      = None
     class Installer:
         files       = "install.py"
     image           = None      # Rasbian image filename
@@ -187,8 +194,34 @@ class App:
         except Exception as e:
             print(e)
             os._exit(-1)
+        #
+        # Section "Git"
+        #
+        try:
+            section = cfg["Git"]
+            App.Git.name    = section.get("name")
+            App.Git.email   = section.get("email")
+            App.Git.editor  = section.get("editor")
+        except Exception as e:
+            print(e)
+            os._exit(1)
 
 
+class PathOwner:
+    """Constructed with a file or path. Reads UID and GID."""
+    def __init__(self, filepath: str):
+        if not os.path.exists(filepath):
+            raise ValueError("'{}' does not exist!".format(filepath))
+        stat_info = os.stat(filepath)
+        self.uid = stat_info.st_uid
+        self.gid = stat_info.st_gid
+    def __enter__(self):
+        return self
+    def __exit__(self, type, value, traceback):
+        pass
+    def setAsOwner(self, filepath: str):
+        """Sets UID and GID for specified file/path to match the resource provided when this object was created."""
+        os.chown(filepath, self.uid, self.gid)
 
 
 ###############################################################################
@@ -317,13 +350,13 @@ WantedBy=multi-user.target
 
 
 
-
+""" TO BE REMOVED
 ##############################################################################
 #
 # Read <script>.config into App class
 #
 def read_config(config_file: str):
-    """Reads the specified config file and updates App configuration."""
+    " ""Reads the specified config file and updates App configuration."" "
     cfg = configparser.ConfigParser()
     if file_exists(config_file):
         try:
@@ -373,7 +406,7 @@ def read_config(config_file: str):
     except Exception as e:
         print(e)
         os._exit(-1)
-
+"""
 
 
 
@@ -1151,6 +1184,29 @@ if __name__ == '__main__':
                         App.Script.path + "/ssh"
                     )
                 )
+
+
+        #
+        # Git configuration (/home/pi/.gitconfig)
+        #
+        print(
+            "Creating .gitconfig...",
+            end = "", flush = True
+        )
+        with PathOwner('/mnt/home/pi') as pi:
+            with open("/mnt/home/pi/.gitconfig", "w") as file:
+                if App.Git.name or App.Git.email:
+                    file.write("[user]\n")
+                    if App.Git.name:
+                        file.write("        name = {}\n".format(App.Git.name))
+                    if App.Git.email:
+                        file.write("        email = {}\n".format(App.Git.email))
+                if App.Git.editor:
+                    file.write("[core]\n")
+                    file.write("        editor = {}".format(App.Git.editor))
+            pi.setAsOwner("/mnt/home/pi/.gitconfig")
+        App.report("~/.gitconfig created")
+        print("Done!")
 
 
     except Exception as e:
