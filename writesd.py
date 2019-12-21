@@ -33,6 +33,7 @@
 #   0.6.0   2019-12-20  Add .gitconfig creation, configurable copy of
 #                       installation scripts to /boot ("Installer" in
 #                       the writesd.config file).
+#   0.6.1   2019-12-20  Run-once implementation. Better install script handling
 #
 #
 #   Commandline options:
@@ -124,10 +125,12 @@ class App:
         email       = None
         editor      = None
     class Installer:
-        files       = "install.py"
-    image           = None      # Rasbian image filename
-    blkdev          = None      # Device file to write into
-    summary         = ""        # Report of actions
+        copy: list  = ["install.py"]
+        run         = None          # Script to run by /etc/init.d/run-once
+        initdscript = None          # /etc/init.d/run-once script File object
+    image           = None          # Rasbian image filename
+    blkdev          = None          # Device file to write into
+    summary         = ""            # Report of actions
     @staticmethod
     def report(msg: str):
         App.summary += "  - " + msg + "\n"
@@ -141,7 +144,7 @@ class App:
             try:
                 cfg.read(cfgfile)
             except Exception as e:
-                print(e)
+                print("read-config():", e)
                 os._exit(-1)
         else:
             print(
@@ -165,7 +168,7 @@ class App:
                     )
                 )
         except Exception as e:
-            print(e)
+            print("read-config():", e)
             os._exit(-1)
         #
         # Section "DDNS"
@@ -183,16 +186,23 @@ class App:
                 # Include only those that are included in mode options -list
                 App.DDNS.default_for = [ x for x in lst if x in App.Mode.options ]
         except Exception as e:
-            print(e)
+            print("read-config():", e)
             os._exit(-1)
         #
         # Section "Installer"
         #
         try:
             section = cfg["Installer"]
-            App.Installer.files = section.get("files", App.Installer.files)
+            App.Installer.run = section.get("run", App.Installer.run)
+            lst = section.get("copy")
+            if lst:
+                print("CONFIG FILE HAS COPY", lst)
+                # Strip whitespaces and clean out empties
+                lst = [x.strip() for x in lst.split(",") if x.strip()]
+                # remove duplicates
+                App.Installer.copy = list(set(lst))
         except Exception as e:
-            print(e)
+            print("read-config():", e)
             os._exit(-1)
         #
         # Section "Git"
@@ -203,7 +213,7 @@ class App:
             App.Git.email   = section.get("email")
             App.Git.editor  = section.get("editor")
         except Exception as e:
-            print(e)
+            print("read-config():", e)
             os._exit(1)
 
 
@@ -348,65 +358,39 @@ WantedBy=multi-user.target
 """
 )
 
+App.Installer.initdscript = File(
+    "/etc/init.d/run-once",
+    0o774,
+    """#! /bin/sh
 
+### BEGIN INIT INFO
+# Provides:             run-once
+# Required-Start:       $remote_fs $syslog
+# Required-Stop:        $remote_fs $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:
+# Short-Description:    Execute installer script once
+### END INIT INFO
 
-""" TO BE REMOVED
-##############################################################################
-#
-# Read <script>.config into App class
-#
-def read_config(config_file: str):
-    " ""Reads the specified config file and updates App configuration."" "
-    cfg = configparser.ConfigParser()
-    if file_exists(config_file):
-        try:
-            cfg.read(config_file)
-        except Exception as e:
-            print(e)
-            os._exit(-1)
-    else:
-        print(
-            "Notification: Configuration file '{}' does not exist.".format(
-                os.path.basename(config_file)
-            )
-        )
-        return
-    #
-    # Section "Mode"
-    #
-    try:
-        section = cfg["Mode"]
-        val = section.get("default", App.Mode.default)
-        if val in App.Mode.options:
-            App.Mode.default = val
-        else:
-            print(
-                "{}: WARNING: Invalid Mode.default value! Ignoring...".format(
-                    os.path.basename(config_file)
-                )
-            )
-    except Exception as e:
-        print(e)
-        os._exit(-1)
-    #
-    # Section "DDNS"
-    #
-    try:
-        section = cfg["DDNS"]
-        App.DDNS.username   = section.get("username", App.DDNS.username)
-        App.DDNS.password   = section.get("password", App.DDNS.password)
-        val                 = section.get("enabled modes", App.DDNS.default_for)
-        if val != "":
-            # Strip leading and trailing whitespace, convert to uppercase
-            lst = [ x.strip().upper() for x in val.split(",") ]
-            # Remove duplicates
-            lst = list(dict.fromkeys(lst))
-            # Include only those that are included in mode options -list
-            App.DDNS.default_for = [ x for x in lst if x in App.Mode.options ]
-    except Exception as e:
-        print(e)
-        os._exit(-1)
+ETCFILE="/etc/run-once.executed"
+INSTALLER="{{installer}}"
+
+set -e
+
+# If /etc/ file exists, this has already been executed
+test -e $ETCFILE && exit 0
+
+umask 022
+
+if test -f $INSTALLER; then
+    date --iso-8601=seconds > $ETCFILE
+    python3 $INSTALLER
+fi
+
+exit 0
 """
+)
+
 
 
 
@@ -1056,7 +1040,7 @@ if __name__ == '__main__':
         # Copy ´install.py´ to /boot (/mnt)
         #  [f.strip() for f in App.Installer.files.split(",")]
         print("Copying installer script(s)... ")
-        for installer in [f.strip() for f in App.Installer.files.split(",")]:
+        for installer in App.Installer.copy:
             # Unless absolute, prefix with script directory
             if installer[:1] != '/':
                 installer = App.Script.path + "/" + installer
@@ -1205,8 +1189,36 @@ if __name__ == '__main__':
                     file.write("[core]\n")
                     file.write("        editor = {}".format(App.Git.editor))
             pi.setAsOwner("/mnt/home/pi/.gitconfig")
-        App.report("~/.gitconfig created")
+        App.report("~/.gitconfig created for user 'pi'")
         print("Done!")
+
+
+        #
+        # Run Once init.d script
+        #
+        if App.Installer.run:
+            print(
+                "Creating run-once init.d script...",
+                end = "", flush = True
+            )
+            script = App.Installer.initdscript
+            script.content = script.content.replace(
+                "{{installer}}",
+                "/boot/" + os.path.basename(App.Installer.run)
+            )
+            with open("/mnt" + App.Installer.initdscript.name, "w") as file:
+                file.write(script.content)
+                os.chmod(
+                    "/mnt" + App.Installer.initdscript.name,
+                    App.Installer.initdscript.permissions
+                )
+            App.report(
+                "Run Once init.d script for '{}'".format(
+                    App.Installer.run
+                )
+            )
+            print("Done!")
+
 
 
     except Exception as e:
@@ -1224,7 +1236,7 @@ if __name__ == '__main__':
         do_or_die("umount /mnt")
         print("Done!")
 
-    print("PATEMON Rasbian image creation is done!")
+    print("Rasbian image write and configuration is complete!")
     print(App.summary)
     print("You can safely remove the uSD card now.")
     print("Next:")

@@ -7,6 +7,8 @@
 #   0.1.1   2019-12-19  Install and configure phpLiteAdmin
 #   0.2.0   2019-12-20  SSL Cert generation and Nginx config update
 #   0.2.1   2019-12-20  Fix SSL certificate generation -subj argument
+#   0.2.2   2019-12-20  Fix repository URL
+#   0.2.3   2019-12-20  Minor fix
 #
 #   MUST have Python 3.5+ (subprocess.run())
 #
@@ -27,7 +29,7 @@ import datetime
 import subprocess
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.2.1"
+__version__ = "0.2.3"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -347,8 +349,11 @@ class Identity():
 
 def do_or_die(cmd: str, out = subprocess.DEVNULL):
     """call do_or_die("ls", out = None), if you want output. Alternatively, subprocess.PIPE will also work."""
+    # Set empty double-quotes as empty list item
+    # Required for commands like; ssh-keygen ... -N ""
+    cmd = ['' if i == '""' or i == "''" else i for i in cmd.split(" ")]
     prc = subprocess.run(
-        cmd.split(" "),
+        cmd,
         stdout = out,
         stderr = out
     )
@@ -358,18 +363,6 @@ def do_or_die(cmd: str, out = subprocess.DEVNULL):
     if prc.returncode:
         #print("Command '{}' failed!".format(cmd))
         raise ValueError("code {}, command: {}".format(prc.returncode, cmd))
-
-#def do_or_die(cmd: str, out = subprocess.DEVNULL):
-#    """call do_or_die("ls", out = None), if you want output"""
-#    prc = subprocess.run(
-#        cmd.split(" "),
-#        stdout = out,
-#        stderr = out
-#    )
-#    if prc.returncode:
-#        log.error("Command '{}' failed!".format(cmd))
-#        raise ValueError("{} from: {}".format(prc.returncode, cmd))
-#        #os._exit(-1)  # Previously this just literally died here...
 
 
 def localize_timezone():
@@ -552,10 +545,12 @@ if __name__ == '__main__':
 
         #
         # Create /var/wwww/vm.utu.fi
+        # Ownership as pi.www-data to allow .sqlite3 db file access
         #
         log.info("Creating /var/www/vm.utu.fi")
         do_or_die("mkdir /var/www/vm.utu.fi")
-        do_or_die("chown pi.pi /var/www/vm.utu.fi")
+        do_or_die("chown pi.www-data /var/www/vm.utu.fi")
+        do_or_die("chmod 775 /var/www/vm.utu.fi")
 
 
         #
@@ -563,8 +558,6 @@ if __name__ == '__main__':
         #
         log.info("Creating virtual host into Nginx")
         files['nginx.site'].create()
-        #with open("/etc/nginx/sites-available/vm.utu.fi", "w") as f:
-        #    f.write(ngimx_vhost)
         do_or_die("ln -s /etc/nginx/sites-available/vm.utu.fi /etc/nginx/sites-enabled/vm.utu.fi")
 
 
@@ -573,8 +566,6 @@ if __name__ == '__main__':
         #
         log.info("Creating uWSGI application config")
         files['uwsgi.ini'].create()
-        #with open("/etc/uwsgi/apps-available/vm.utu.fi.ini", "w") as f:
-        #    f.write(uwsgi_app)
         do_or_die("ln -s /etc/uwsgi/apps-available/vm.utu.fi.ini /etc/uwsgi/apps-enabled/vm.utu.fi.ini")
 
 
@@ -585,6 +576,8 @@ if __name__ == '__main__':
         log.info("Cloning vm.utu.fi from GitHub")
         with Identity('pi'):
             do_or_die("git clone https://github.com/jasata/utu-vm-site /var/www/vm.utu.fi")
+            # Fix remote url
+            do_or_die("git --git-dir=/var/www/vm.utu.fi/.git --work-tree=/var/www/vm.utu.fi/ remote set-url origin git@github.com:jasata/utu-vm-site.git")
 
 
         #
@@ -614,7 +607,8 @@ if __name__ == '__main__':
                 raise
             finally:
                 cursor.close()
-        do_or_die("chown pi.pi " + database_file)
+        do_or_die("chown pi.www-data " + database_file)
+        do_or_die("chmod 664 " + database_file)
 
 
         #
