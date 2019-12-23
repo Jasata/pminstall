@@ -9,6 +9,7 @@
 #   0.2.1   2019-12-20  Fix SSL certificate generation -subj argument
 #   0.2.2   2019-12-20  Fix repository URL
 #   0.2.3   2019-12-20  Minor fix
+#   0.2.4   2019-12-23  Updated for v0.2.0 utu-vm-site
 #
 #   MUST have Python 3.5+ (subprocess.run())
 #
@@ -29,7 +30,7 @@ import datetime
 import subprocess
 
 # PEP 396 -- Module Version Numbers https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 __author__  = "Jani Tammi <jasata@utu.fi>"
 VERSION = __version__
 HEADER  = """
@@ -272,16 +273,18 @@ files['flask.conf'] = ConfigFile(
 # application.conf - Jani Tammi <jasata@utu.fi>
 #
 #   0.1.0   2019.12.07  Initial version.
+#   0.2.0   2019.12.23  Updated for SSO implementation.
 #
 #
-# See http://flask.pocoo.org/docs/0.12/config/ for built-in config values.
+# See https://flask.palletsprojects.com/en/1.1.x/config/ for details.
 #
 #
 import os
 import logging
 
 DEBUG                    = True
-SESSION_COOKIE_NAME      = 'session'
+SESSION_COOKIE_NAME      = 'FLASKSESSION'
+SESSION_LIFETIME         = 30
 SECRET_KEY               = {{secret_key}}
 EXPLAIN_TEMPLATE_LOADING = True
 TOP_LEVEL_DIR            = os.path.abspath(os.curdir)
@@ -289,10 +292,10 @@ BASEDIR                  = os.path.abspath(os.path.dirname(__file__))
 
 
 #
-# Command table configuration (seconds)
+# Single Sign-On session validation settings
 #
-COMMAND_TIMEOUT         = 0.5
-COMMAND_POLL_INTERVAL   = 0.2
+SSO_COOKIE              = 'ssoUTUauth'
+SSO_SESSION_API         = 'https://sso.utu.fi/sso/json/sessions/'
 
 
 #
